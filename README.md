@@ -49,7 +49,7 @@ The largest shortfalls were 2012 (−22%), 2002 (−8%) and 2011 (−6%). Heat m
 
 ### 2. The annual price link rests on one year
 
-Across all years, more stressful summers line up with summer corn rallies: r = +0.42 (p = 0.03), and +0.57 on a fund whose price does not jump at contract rolls. **Excluding 2012, both fall to zero** — r = +0.07 and +0.04, neither significant. In 2023, the second most stressful summer on the index, corn fell 22%.
+Across all years, more stressful summers line up with summer corn rallies: r = +0.42 (p = 0.03), and +0.57 on a fund whose price does not jump at contract rolls. **Excluding 2012, both fall to near zero** — r = +0.07 and +0.04, neither significant. In 2023, the second most stressful summer on the index, corn fell 22%.
 
 ### 3. Prices move before the drought data
 
@@ -132,12 +132,12 @@ Every verified source is free, and all but USDA's need no key.
 ## Reproduce
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python analysis/initial_analysis.py
 ```
 
-Public data is cached under `data/raw/` on the first run.
+Tested with Python 3.14, pandas 3.0 and NumPy 2.5. Public data (about 6 MB) is downloaded and cached under `data/raw/` on the first run.
 
 ## References
 
