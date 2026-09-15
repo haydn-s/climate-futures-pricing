@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+# Raw pulls are cached here and are always re-derivable from the public sources
+data/
+.DS_Store
