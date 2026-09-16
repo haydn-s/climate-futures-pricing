@@ -5,3 +5,9 @@ __pycache__/
 # Raw pulls are cached here and are always re-derivable from the public sources
 data/
 .DS_Store
+node_modules/
+# Derived from data/ for the deck's charts
+presentation/chart_data.json
+presentation/previews/
+# PowerPoint lock files
+~$*

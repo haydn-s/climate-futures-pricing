@@ -1,0 +1,17 @@
+{
+  "name": "climate-futures-pricing-deck",
+  "private": true,
+  "description": "Builds the proposal deck from the project's own analysis data",
+  "scripts": {
+    "build": "node build_deck.js climate-futures-pricing-proposal.pptx",
+    "previews": "node build_deck.js previews --single"
+  },
+  "dependencies": {
+    "jszip": "^3.10.2",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-icons": "^5.7.0",
+    "sharp": "^0.35.4"
+  }
+}

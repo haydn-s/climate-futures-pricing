@@ -57,12 +57,12 @@ Week by week through the growing season, corn returns line up with drought incre
 
 | Corn return, relative to publication of the drought change | Correlation |
 |---|---|
-| 3 weeks before | +0.08 * |
+| 3 weeks before | +0.07 * |
 | 2 weeks before | +0.14 *** |
 | 1 week before | +0.10 ** |
 | Publication week | +0.00 |
 | 1 week after | +0.07 |
-| 2 weeks after | +0.08 * |
+| 2 weeks after | +0.07 * |
 
 Drought builds over several weeks, which can make prices appear to lead by accident, so every lead and lag was also estimated jointly. Returns stay significant one to two weeks before publication, nothing after publication is significant, and the pattern holds with 2012 excluded.
 
@@ -93,7 +93,7 @@ Directions that could still produce one: measuring *how early* the market knows,
 |---|---|---|---|
 | [NASA POWER](https://power.larc.nasa.gov/) | Daily temperature and precipitation for any location | 1981 → present, about 3 days behind | Verified, used |
 | [US Drought Monitor](https://droughtmonitor.unl.edu/) | Weekly share of area in each drought category, by county, state and nation | 2000 → present | Verified, used |
-| Futures prices (Yahoo Finance) | Daily corn, soybeans, wheat, coffee, cocoa and orange juice | 2000 → present | Verified, used |
+| Futures prices (Yahoo Finance) | Daily corn, soybeans, wheat, coffee, cocoa and orange juice | 2000 → present (orange juice from 2001) | Verified, used |
 | Teucrium CORN fund | Corn prices without contract-roll jumps | 2010 → present | Verified, used |
 | [Crop yields](https://ourworldindata.org/grapher/maize-yields) (FAO, via Our World in Data) | Annual national yields for US corn and West African cocoa | 2000 → 2024–25 | Verified, used |
 | [NOAA Storm Events](https://www.ncdc.noaa.gov/stormevents/) | Severe weather events with property and crop damage | 1950 → 2026 | Verified, not yet used |
