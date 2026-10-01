@@ -3,3 +3,10 @@ numpy>=1.26
 matplotlib>=3.8
 seaborn>=0.12
 ipykernel>=6.30
+# Pipeline: config, columnar storage, tests
+pyyaml>=6.0
+pyarrow>=16.0
+pytest>=8.0
+# Modelling: the peek sweep in analysis/corn_peek_sweep.py
+scikit-learn>=1.5
+statsmodels>=0.14
