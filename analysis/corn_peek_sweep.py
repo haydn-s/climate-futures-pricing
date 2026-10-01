@@ -45,21 +45,15 @@ WHAT THIS SCRIPT REFUSES TO DO, because each would manufacture the result:
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from sklearn.ensemble import HistGradientBoostingRegressor  # noqa: E402
-from sklearn.linear_model import Ridge  # noqa: E402
-from sklearn.pipeline import make_pipeline  # noqa: E402
-from sklearn.preprocessing import StandardScaler  # noqa: E402
-
+from pipeline import backtest  # noqa: E402
 from pipeline.config import load_geography  # noqa: E402
 from pipeline.features import panel  # noqa: E402
 from pipeline.storage import ProcessedStore, default_data_root  # noqa: E402
@@ -88,80 +82,6 @@ FEATURE_SETS = {
 DEFAULT_SET = "deltas+heat"
 
 
-@dataclass(frozen=True)
-class Score:
-    """One model, one information set, out of sample."""
-
-    peek: int
-    model: str
-    r2: float
-    hit_rate: float
-    n_train: int
-    n_test: int
-
-    def line(self) -> str:
-        flag = "" if self.peek == 0 else "  NOT TRADEABLE"
-        return (f"  peek {self.peek:2d}d  {self.model:8s}  R2 {self.r2:+.4f}   "
-                f"hit {self.hit_rate:.1%}   train {self.n_train:4d} test {self.n_test:4d}{flag}")
-
-
-def forward_folds(n: int, n_splits: int, embargo: int) -> list[tuple[np.ndarray, np.ndarray]]:
-    """Expanding-window splits that run forward in time, with a gap.
-
-    `embargo` rows are dropped from the END of each training block: the last
-    training observation's forward return extends `horizon` days into what
-    becomes the test block, so without the gap the two share an outcome.
-    """
-    folds = []
-    fold_size = n // (n_splits + 1)
-    for split in range(1, n_splits + 1):
-        train_end = fold_size * split
-        test_end = min(fold_size * (split + 1), n)
-        train = np.arange(0, max(train_end - embargo, 0))
-        test = np.arange(train_end, test_end)
-        if len(train) > 50 and len(test) > 10:
-            folds.append((train, test))
-    return folds
-
-
-def evaluate(frame: pd.DataFrame, features: list[str], target: str, *,
-             peek: int, embargo: int) -> list[Score]:
-    """Out-of-sample R-squared and directional hit rate, averaged over folds."""
-    usable = frame.dropna(subset=[*features, target]).reset_index(drop=True)
-    X, y = usable[features].to_numpy(), usable[target].to_numpy()
-    folds = forward_folds(len(usable), N_SPLITS, embargo)
-    if not folds:
-        return []
-
-    candidates = {
-        "ridge": lambda: make_pipeline(StandardScaler(), Ridge(alpha=10.0)),
-        "gbm": lambda: HistGradientBoostingRegressor(
-            max_depth=3, max_iter=200, learning_rate=0.05, random_state=0),
-    }
-    scores = []
-    for name, make in candidates.items():
-        r2s, hits, n_train, n_test = [], [], [], []
-        for train, test in folds:
-            model = make().fit(X[train], y[train])
-            predicted = model.predict(X[test])
-            # The train mean is the only baseline knowable at prediction time. A
-            # constant prediction scores exactly 0.0 against it, so anything
-            # negative here is worse than that naive forecast.
-            baseline = y[train].mean()
-            residual = np.sum((y[test] - predicted) ** 2)
-            total = np.sum((y[test] - baseline) ** 2)
-            r2s.append(1.0 - residual / total if total > 0 else np.nan)
-            moved = predicted != 0
-            hits.append(np.mean(np.sign(predicted[moved]) == np.sign(y[test][moved]))
-                        if moved.any() else np.nan)
-            n_train.append(len(train))
-            n_test.append(len(test))
-        scores.append(Score(peek=peek, model=name, r2=float(np.nanmean(r2s)),
-                            hit_rate=float(np.nanmean(hits)),
-                            n_train=int(np.mean(n_train)), n_test=int(np.mean(n_test))))
-    return scores
-
-
 def main(feature_set: str = DEFAULT_SET) -> None:
     if feature_set not in FEATURE_SETS:
         raise SystemExit(f"unknown feature set {feature_set!r} "
@@ -174,8 +94,8 @@ def main(feature_set: str = DEFAULT_SET) -> None:
     print(f"\ntarget: {target} ({HORIZON} trading days forward, {TARGET_SERIES})")
     print(f"folds:  {N_SPLITS} expanding, forward only, {HORIZON}-day embargo")
 
-    results: list[Score] = []
-    excluding_2012: list[Score] = []
+    results: list[tuple[int, backtest.Score]] = []
+    excluding_2012: list[tuple[int, backtest.Score]] = []
     for peek in PEEKS:
         frame, spec = panel.build(store, geography, crop="corn", peek_days=peek,
                                   horizons=(HORIZON,), sensitive_months_only=True)
@@ -194,19 +114,24 @@ def main(feature_set: str = DEFAULT_SET) -> None:
             if spec.unavailable:
                 print(f"UNFILLED, excluded: {', '.join(spec.unavailable)}")
             print()
-        results.extend(evaluate(frame, features, target, peek=peek, embargo=HORIZON))
+        results.extend((peek, score) for score in backtest.evaluate(
+            frame, features, target, label=f'peek {peek}d', embargo=HORIZON,
+            n_splits=N_SPLITS, tradeable=(peek == 0)))
         without = frame.loc[frame["year"] != 2012]
-        excluding_2012.extend(evaluate(without, features, target, peek=peek, embargo=HORIZON))
+        excluding_2012.extend((peek, score) for score in backtest.evaluate(
+            without, features, target, label=f'peek {peek}d', embargo=HORIZON,
+            n_splits=N_SPLITS, tradeable=(peek == 0)))
 
     print("ALL YEARS")
-    for score in results:
+    for _, score in results:
         print(score.line())
     print("\nEXCLUDING 2012")
-    for score in excluding_2012:
+    for _, score in excluding_2012:
         print(score.line())
 
-    tradeable = [s for s in results if s.peek == 0]
-    best_peek = max((s for s in results if s.peek > 0), key=lambda s: s.r2, default=None)
+    tradeable = [score for peek, score in results if peek == 0]
+    peeking = [score for peek, score in results if peek > 0]
+    best_peek = max(peeking, key=lambda score: score.r2, default=None)
     print("\n" + "-" * 72)
     print("READING THIS: out-of-sample R-squared near or below zero at peek 0 means the")
     print("published weather adds nothing to a 5-day forward return -- the market has")
@@ -215,7 +140,7 @@ def main(feature_set: str = DEFAULT_SET) -> None:
     if tradeable:
         print(f"\npeek 0 (tradeable):  best R2 {max(s.r2 for s in tradeable):+.4f}")
     if best_peek is not None:
-        print(f"best peeking model:  R2 {best_peek.r2:+.4f} at peek {best_peek.peek}d "
+        print(f"best peeking model:  R2 {best_peek.r2:+.4f} at {best_peek.label} "
               f"({best_peek.model}) -- NOT a trading result")
 
 
