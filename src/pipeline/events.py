@@ -147,7 +147,15 @@ def window_sum(matrix: np.ndarray, start: int, end: int, *, pre: int = PRE) -> n
     lo, hi = start + pre, end + pre + 1
     if lo < 0 or hi > matrix.shape[1]:
         raise ValueError(f"window [{start}, {end}] falls outside the event matrix")
-    return np.nansum(matrix[:, lo:hi], axis=1)
+    block = matrix[:, lo:hi]
+    summed = np.nansum(block, axis=1)
+    # np.nansum RETURNS 0.0 FOR AN ALL-NaN ROW, not NaN. An event with no room
+    # for its window would therefore contribute a 0% return to every average and
+    # drag the mean toward zero -- diluting the very effect being measured, and
+    # silently, because the row count still looks right. An absent window is
+    # unknown, not flat.
+    summed[np.isnan(block).all(axis=1)] = np.nan
+    return summed
 
 
 def deseasonalise(returns: pd.Series, dates: pd.Series) -> pd.Series:
@@ -189,6 +197,35 @@ def placebo_distribution(values: np.ndarray, eligible: np.ndarray, n_events: int
         matrix = event_matrix(values, picks, pre=pre, post=post)
         results[draw] = np.nanmean(window_sum(matrix, start, end, pre=pre))
     return results
+
+
+def forward_change(selected: pd.DataFrame, timeline: pd.DataFrame, *,
+                   column: str = "d2", maps_ahead: int = 2) -> pd.Series:
+    """How much further the drought went in the `maps_ahead` maps after an event.
+
+    This is the confound in the event study made measurable. Events are selected
+    on a large jump, drought is persistent, so the fortnight after publication
+    usually contains MORE drought as well as whatever the market did about the
+    figure that was published. Splitting events on this series separates the two:
+    where the drought stopped, a post-publication return cannot be the next
+    week's weather.
+
+    Positive means the drought kept worsening. NaN where the timeline runs out,
+    which must not be read as "it stopped".
+    """
+    if selected.empty or timeline.empty:
+        return pd.Series(dtype="float64")
+    ordered = timeline.sort_values("map_date", ignore_index=True)
+    levels = ordered[column].to_numpy(dtype="float64")
+    dates = ordered["map_date"].to_numpy()
+    positions = np.searchsorted(dates, selected["map_date"].to_numpy(), side="left")
+
+    changes = np.full(len(selected), np.nan)
+    for row, position in enumerate(positions):
+        later = position + maps_ahead
+        if position < len(levels) and later < len(levels):
+            changes[row] = levels[later] - levels[position]
+    return pd.Series(changes, index=selected.index)
 
 
 def quantile_of(observed: float, distribution: np.ndarray) -> float:

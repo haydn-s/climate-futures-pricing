@@ -189,3 +189,56 @@ def test_the_quantile_locates_the_observation_in_the_distribution() -> None:
     assert events.quantile_of(-1.0, distribution) == 0.0
     assert events.quantile_of(200.0, distribution) == 1.0
     assert np.isnan(events.quantile_of(1.0, np.array([])))
+
+
+# -------------------------------------------------------------- the confound
+
+
+def test_forward_change_measures_how_much_further_the_drought_went() -> None:
+    """The event study's confound, made measurable.
+
+    d2 runs 10, 30, 45, 40: an event at the 30 is followed by 45 two maps on,
+    so the drought kept worsening by 15 points after it was published.
+    """
+    weekly = timeline(["2012-06-05", "2012-06-12", "2012-06-19", "2012-06-26"],
+                      [10.0, 20.0, 15.0, -5.0])
+    assert weekly["d2"].tolist() == [10.0, 30.0, 45.0, 40.0]
+    chosen = weekly.iloc[[1]]
+    assert events.forward_change(chosen, weekly, maps_ahead=2).iloc[0] == pytest.approx(10.0)
+    # One map ahead instead: 45 - 30.
+    assert events.forward_change(chosen, weekly, maps_ahead=1).iloc[0] == pytest.approx(15.0)
+
+
+def test_a_drought_that_peaked_reports_a_negative_forward_change() -> None:
+    weekly = timeline(["2012-07-03", "2012-07-10", "2012-07-17"], [60.0, -10.0, -20.0])
+    chosen = weekly.iloc[[0]]
+    assert events.forward_change(chosen, weekly, maps_ahead=2).iloc[0] == pytest.approx(-30.0)
+
+
+def test_running_off_the_end_of_the_timeline_is_nan_not_zero() -> None:
+    """Zero would read as "the drought stopped", which is a different claim."""
+    weekly = timeline(["2012-07-03", "2012-07-10"], [60.0, 5.0])
+    changes = events.forward_change(weekly.iloc[[1]], weekly, maps_ahead=2)
+    assert np.isnan(changes.iloc[0])
+
+
+def test_forward_change_on_empty_inputs_returns_empty() -> None:
+    weekly = timeline(["2012-07-03"], [10.0])
+    assert events.forward_change(weekly.iloc[[]], weekly).empty
+    assert events.forward_change(weekly, timeline([], [])).empty
+
+
+def test_an_event_with_no_window_sums_to_nan_not_zero() -> None:
+    """np.nansum returns 0.0 for an all-NaN row, which is a 0% return.
+
+    Averaged in beside real events that would dilute every event-study mean
+    toward zero, understating the effect while the row count still looks right.
+    """
+    values = np.arange(10, dtype="float64")
+    matrix = events.event_matrix(values, np.array([1, 5]), pre=2, post=2)
+    assert np.isnan(matrix[0]).all(), "position 1 has no room"
+    summed = events.window_sum(matrix, -2, -1, pre=2)
+    assert np.isnan(summed[0]), "a missing window must not read as a flat return"
+    assert summed[1] == pytest.approx(7.0)
+    # And the mean over real events is unaffected by the absent one.
+    assert np.nanmean(summed) == pytest.approx(7.0)
