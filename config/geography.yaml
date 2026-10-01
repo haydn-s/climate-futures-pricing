@@ -1,0 +1,126 @@
+# Where each crop is grown and when weather matters to it.
+#
+# Corn comes first because it is the primary case; cocoa is here so the schema is
+# not quietly corn-shaped. A crop is described by any combination of states,
+# counties and points -- corn uses states now and counties later, cocoa uses
+# points -- plus the one window of the year when weather moves the crop.
+#
+# Schema, validated by src/pipeline/config.py::load_geography. Unknown keys are
+# rejected so a typo fails loudly instead of being silently ignored.
+#
+#   crops.<name>.label             required  human label for output.
+#   crops.<name>.sensitive_months  required  {start, end, label}. Months are
+#                                            1-12 inclusive of both ends. A window
+#                                            may wrap the new year (start > end)
+#                                            for crops whose season does.
+#   crops.<name>.countries         optional  entity names as the yield source
+#                                            spells them; used to join OWID rows.
+#   crops.<name>.states            optional  US states in scope. Each state
+#                                            carries three codes on purpose --
+#                                            see the warning below.
+#   crops.<name>.counties          optional  {fips, name, weight}. fips is the
+#                                            5-digit FEDERAL code and must be
+#                                            QUOTED or YAML eats the leading zero.
+#                                            weight is optional; when any county
+#                                            has one they all must, and weights
+#                                            are normalised at use.
+#   crops.<name>.points            optional  {name, country, lat, lon} anchors for
+#                                            gridded weather outside the US.
+#   crops.<name>.notes             optional  why these choices, and what is shaky.
+#
+# THREE CODES PER STATE, AND THEY ARE NOT INTERCHANGEABLE:
+#   postal  the two-letter abbreviation. USDM's county endpoint takes this, and it
+#           is the prefix nClimGrid writes into its region names ("IA: Polk County").
+#   fips    the 2-digit federal state code. Everything from USDA and Census keys
+#           on this; a 5-digit county FIPS starts with it.
+#   ncei    the 2-digit NCEI state code used in nClimGrid county identifiers, which
+#           are NOT FIPS codes. Iowa is NCEI 13 and FIPS 19, so nClimGrid calls
+#           Polk County 13153 while USDA calls it 19153. Mixing them does not
+#           error; it files Iowa's weather under Massachusetts, whose NCEI code is
+#           19. Convert through this table and nowhere else.
+version: 1
+
+crops:
+
+  corn:
+    label: "US corn (maize)"
+    countries: ["United States"]
+    sensitive_months:
+      start: 4
+      end: 10
+      label: "planting through harvest, April to October"
+    # The five largest corn-producing states the analysis already tracks. Codes
+    # verified against the nClimGrid county fixtures and the county FIPS quoted in
+    # the probe findings (IA 13153/19153, IL 11113/17113, IN 12007/18***,
+    # MN 21091/27***, NE 25041/31***).
+    states:
+      - {postal: IA, name: Iowa, fips: "19", ncei: "13"}
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: MN, name: Minnesota, fips: "27", ncei: "21"}
+      - {postal: NE, name: Nebraska, fips: "31", ncei: "25"}
+    # County FIPS with USDA production weights land here once nass_production has
+    # a key. Until then every state is weighted equally, which is what the current
+    # analysis does and says. Intended shape:
+    #   counties:
+    #     - {fips: "19153", name: "Polk County, IA", weight: 0.0123}
+    #     - {fips: "17113", name: "McLean County, IL", weight: 0.0201}
+    # fips is the FEDERAL code. Translate to an nClimGrid identifier through the
+    # state table above; do not paste an nClimGrid id in here.
+    counties: []
+    # The five representative points analysis/initial_analysis.py uses, one per
+    # state, carried into config so NASA POWER can serve corn at all: it is a
+    # point API, so an empty points list made this crop unreachable through the
+    # only source that is keyless, global, and 3-5 days behind rather than a
+    # month. These are NOT a substitute for the nClimGrid county averages -- one
+    # point stands in for an entire state, which is the equal-weighting
+    # limitation the README already names. They exist to reproduce the
+    # preliminary results through the pipeline and to cross-check the county
+    # aggregate against the series the previews were built on.
+    points:
+      - {name: Iowa, country: United States, lat: 42.0, lon: -93.6}
+      - {name: Illinois, country: United States, lat: 40.1, lon: -88.9}
+      - {name: Nebraska, country: United States, lat: 40.8, lon: -98.4}
+      - {name: Minnesota, country: United States, lat: 44.1, lon: -94.0}
+      - {name: Indiana, country: United States, lat: 40.3, lon: -86.5}
+    notes: |
+      A state-level scope is a deliberate simplification: corn output is
+      concentrated in a few hundred counties, so area-weighted state weather
+      understates the stress the market actually prices. County weights are the
+      planned refinement and the reason the counties key exists empty rather than
+      being left out.
+
+      April to October is wider than the window that matters most -- pollination
+      in July is what makes or breaks a US corn crop -- but the pipeline should
+      carry the whole season and let the analysis narrow it, not the reverse.
+
+  cocoa:
+    label: "West African cocoa"
+    countries: ["Cote d'Ivoire", "Ghana"]
+    sensitive_months:
+      start: 6
+      end: 9
+      label: "main-crop pod development, June to September"
+    states: []
+    counties: []
+    # Growing areas in the two largest producers, as used by
+    # analysis/initial_analysis.py. Points, not polygons: a handful of
+    # representative locations stands in for the cocoa belt.
+    points:
+      - {name: Soubre, country: "Cote d'Ivoire", lat: 5.8, lon: -6.6}
+      - {name: Daloa, country: "Cote d'Ivoire", lat: 6.9, lon: -6.4}
+      - {name: Kumasi, country: Ghana, lat: 6.7, lon: -1.6}
+      - {name: Sunyani, country: Ghana, lat: 7.3, lon: -2.3}
+    notes: |
+      The contrast case: a tree crop damaged over months rather than over a week
+      of heat, so its weather signal should reach price more slowly. Cocoa has no
+      US county geography at all, which is the point of it being here -- an
+      ingest module that assumes states or FIPS codes will break on this crop.
+
+      The June-to-September window is the working assumption, not a finding: the
+      main crop is harvested from October and its pods fill over the preceding
+      rainy months, but the Harmattan dry season (December to February) also
+      damages pods, so a wrapping window may turn out to be the right shape (the
+      schema supports start > end for exactly that reason). The current analysis
+      sidesteps the question with a rolling six-month rainfall anomaly. Verify
+      against an agronomic source before treating this window as settled.
