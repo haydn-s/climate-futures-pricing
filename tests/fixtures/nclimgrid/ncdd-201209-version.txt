@@ -1,0 +1,3 @@
+nClimGrid-Daily v1-0-0 complete for 2012-09-01 through 2012-09-30
+
+  from GHCNd data downloaded on Sat Apr 22 05:19:59 2017

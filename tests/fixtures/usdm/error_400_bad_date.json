@@ -1,0 +1,1 @@
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.1","title":"One or more validation errors occurred.","status":400,"errors":{"EndDate":["The value 'banana' is not valid."],"StartDate":["The value 'banana' is not valid."]},"traceId":"00-34f95abb300b581ebd7fe54dddcc9b19-e39178ea31287bf4-00"}

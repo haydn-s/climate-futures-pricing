@@ -1,0 +1,4 @@
+nClimGrid-Daily v1-0-0 prelim for 2026-09-01 through 2026-09-12
+
+  created on 2026-09-14 with nClimGrid-Daily software vv1-0-0-20250416
+  from GHCN-Daily  3.34-upd-2026091318 CSV files provided on Mon Sep 14 19:24:04 2026
