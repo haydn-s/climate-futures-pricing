@@ -91,15 +91,30 @@ Directions that could still produce one: measuring *how early* the market knows,
 
 | Source | Contents | Coverage | Status |
 |---|---|---|---|
-| [NASA POWER](https://power.larc.nasa.gov/) | Daily temperature and precipitation for any location | 1981 → present, about 3 days behind | Verified, used |
-| [US Drought Monitor](https://droughtmonitor.unl.edu/) | Weekly share of area in each drought category, by county, state and nation | 2000 → present | Verified, used |
-| Futures prices (Yahoo Finance) | Daily corn, soybeans, wheat, coffee, cocoa and orange juice | 2000 → present (orange juice from 2001) | Verified, used |
-| Teucrium CORN fund | Corn prices without contract-roll jumps | 2010 → present | Verified, used |
-| [Crop yields](https://ourworldindata.org/grapher/maize-yields) (FAO, via Our World in Data) | Annual national yields for US corn and West African cocoa | 2000 → 2024–25 | Verified, used |
+| [NASA POWER](https://power.larc.nasa.gov/) | Daily temperature and precipitation for any location | 1981 → present, 3–5 days behind | In the pipeline |
+| [NOAA nClimGrid-Daily](https://www.ncei.noaa.gov/products/land-based-station/nclimgrid-daily) | Daily county-average temperature and precipitation, all 3,107 US counties | 1951 → current month | In the pipeline |
+| [US Drought Monitor](https://droughtmonitor.unl.edu/) | Weekly share of area in each drought category, by county, state and nation | 2000 → present | In the pipeline |
+| Futures prices (Yahoo Finance) | Daily corn, soybeans, wheat, coffee, cocoa and orange juice | 2000 → present (orange juice from 2001) | In the pipeline |
+| Teucrium CORN fund | Corn prices without contract-roll jumps | 2010 → present | In the pipeline |
+| [Crop yields](https://ourworldindata.org/grapher/maize-yields) (FAO, via Our World in Data) | Annual national yields for US corn and West African cocoa | 1866 → 2025 (cocoa 1961 → 2024) | In the pipeline |
 | [NOAA Storm Events](https://www.ncdc.noaa.gov/stormevents/) | Severe weather events with property and crop damage | 1950 → 2026 | Verified, not yet used |
-| [USDA NASS Quick Stats](https://quickstats.nass.usda.gov/) | County-level crop production, for weighting locations | Decades | Needs a free API key; not yet verified |
+| [USDA NASS Quick Stats](https://quickstats.nass.usda.gov/) | County-level crop production, for weighting locations | Decades | Needs a free API key; module written but **unverified** |
 
-Every verified source is free, and all but USDA's need no key.
+Every source is free, and all but USDA's need no key. "In the pipeline" means
+`python -m pipeline fetch` archives it and `clean` turns it into a table — see
+[Reproduce](#reproduce). Two sources are deliberately overlapping: NASA POWER
+serves any latitude and longitude, which is the only way to reach cocoa's West
+African points, while nClimGrid gives proper county averages for the US corn belt
+that a single representative point cannot.
+
+**Every source publishes late, and by a different amount.** That gap is the
+measurement this project rests on, so the pipeline records it per source rather
+than assuming it: a Drought Monitor map is released two days after the Tuesday it
+describes (verified), nClimGrid finalises a month early in the following month
+(one observation), NASA POWER runs 3–5 days behind (observed, and the choice of
+which end to use biases the timing test — see `config/sources.yaml`), a futures
+close is public when the session ends, and the yield data publishes no date at
+all, so it is excluded from anything point-in-time.
 
 ## Approach
 
@@ -123,7 +138,8 @@ Every verified source is free, and all but USDA's need no key.
 - [x] Data sources verified
 - [x] Initial analysis: measurement, price link, timing, cocoa contrast
 - [x] Robustness: results re-tested excluding 2012 and with a joint lead-lag estimate
-- [ ] Production weights from USDA county data
+- [x] Ingestion and cleaning pipeline: six sources, config-driven, every fetch archived with the date it became public
+- [ ] Production weights from USDA county data (needs `NASS_API_KEY`)
 - [ ] Heat measures above crop temperature thresholds
 - [ ] Controls for USDA report days and contract rolls
 - [ ] Forecast data
@@ -138,6 +154,42 @@ python analysis/initial_analysis.py
 ```
 
 Tested with Python 3.14, pandas 3.0 and NumPy 2.5. Public data (about 6 MB) is downloaded and cached under `data/raw/` on the first run.
+
+### The pipeline
+
+`analysis/initial_analysis.py` fetches and caches on its own, which was the right
+size for a preview and does not scale to six sources with different publication
+lags and revision behaviour. That is what the pipeline is for. Sources live in
+`config/sources.yaml` and crop geography in `config/geography.yaml`, so adding
+either needs no Python change:
+
+```bash
+PYTHONPATH=src python -m pipeline check-config
+PYTHONPATH=src python -m pipeline fetch --source usdm --states IA --years 2012
+PYTHONPATH=src python -m pipeline clean --source usdm
+PYTHONPATH=src python -m pipeline status
+```
+
+Every fetch is content-addressed and appended to `data/manifest.jsonl`, so a
+revised file lands beside the old numbers instead of overwriting them — which is
+what makes a restatement visible. Cleaned tables are written to
+`data/processed/*.parquet`, each carrying a `publication_date` column that
+`pipeline.calendar.as_of` filters on, so a backtest can only see what had actually
+been published.
+
+Start narrow. `fetch --source nclimgrid` with no scope is about 820 MB, because
+NCEI serves no geographic subset and every monthly file covers all 3,107 counties;
+the command prints its plan and size before downloading anything, and `--dry-run`
+shows it without fetching. Only `nass_production` needs a key.
+
+```bash
+python -m pytest tests/ -q
+```
+
+282 tests, all offline — every fixture under `tests/fixtures/` is a real captured
+response, with a `PROVENANCE.md` recording where it came from and which trap it
+exists to catch. The exception is `tests/fixtures/nass/`, which is synthetic
+because Quick Stats needs a key, and says so in large letters.
 
 ## References
 
