@@ -149,8 +149,12 @@ def test_cocoa_keeps_the_schema_from_being_corn_only(repo_root: Path) -> None:
 
 def test_unknown_crop_lists_the_configured_ones(repo_root: Path) -> None:
     geography = load_geography(repo_root / GEOGRAPHY)
+    # Sorghum rather than a crop the project might plausibly add: this test used
+    # to ask for soybeans, which stopped being unknown the moment soybeans were
+    # configured, and so tested nothing for a while instead of failing.
+    assert "sorghum" not in {crop.name for crop in geography}
     with pytest.raises(ConfigError, match="corn"):
-        geography.crop("soybeans")
+        geography.crop("sorghum")
 
 
 # --------------------------------------------------------------- rejection

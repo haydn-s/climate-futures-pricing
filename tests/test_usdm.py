@@ -131,7 +131,19 @@ def test_the_valid_week_overlap_returns_a_map_from_before_the_window(usdm_fixtur
 
 
 def test_the_states_in_scope_come_from_the_crops_not_from_python(geography) -> None:
-    assert ingest_usdm._states(geography, []) == ["IA", "IL", "IN", "MN", "NE"]
+    # Derived from the shipped config rather than frozen as a list: the property
+    # under test is that scope FOLLOWS the crops, so hard-coding the answer here
+    # makes the test fail every time a crop is added -- which is the one change
+    # that ought to leave it passing.
+    expected: list[str] = []
+    for crop in geography:
+        for state in crop.states:
+            if state.postal not in expected:
+                expected.append(state.postal)
+    assert expected, "the shipped geography declares no US states at all"
+    assert ingest_usdm._states(geography, []) == expected
+    # Declaration order is preserved and duplicates across crops collapse.
+    assert len(set(expected)) == len(expected)
     assert ingest_usdm._states(geography, ["ia", "NE"]) == ["IA", "NE"]
 
 

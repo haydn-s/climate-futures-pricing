@@ -94,6 +94,73 @@ crops:
       in July is what makes or breaks a US corn crop -- but the pipeline should
       carry the whole season and let the analysis narrow it, not the reverse.
 
+  soybeans:
+    label: "US soybeans"
+    countries: ["United States"]
+    sensitive_months:
+      start: 6
+      end: 9
+      label: "pod set and fill, June to September"
+    # The SAME five states as corn, which is the point of this crop being here:
+    # IA, IL, IN, MN and NE are top-five producers of both, grown in rotation on
+    # the same ground. A corn-belt drought is therefore a soybean-belt drought
+    # too, so this crop adds no new events -- it adds an independent price series
+    # responding to the events corn already has, which is what the event study
+    # was short of.
+    states:
+      - {postal: IA, name: Iowa, fips: "19", ncei: "13"}
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: MN, name: Minnesota, fips: "27", ncei: "21"}
+      - {postal: NE, name: Nebraska, fips: "31", ncei: "25"}
+    counties: []
+    points: []
+    notes: |
+      Shifted one month later than corn on purpose. Corn is made or broken at
+      pollination in July; soybeans set and fill pods through August, so August
+      is their critical month and the two crops read the same summer differently.
+      That offset is the test -- a drought that moves both identically is not
+      being priced through either crop's agronomy.
+
+  wheat:
+    label: "US soft red winter wheat"
+    countries: ["United States"]
+    sensitive_months:
+      start: 4
+      end: 6
+      label: "jointing through grain fill, April to June"
+    # THE CONTRACT DECIDES THE GEOGRAPHY, AND IT IS NOT KANSAS. The archived
+    # wheat series is ZW=F, the Chicago contract, which delivers SOFT RED WINTER
+    # wheat -- grown in the Ohio valley and the eastern Midwest. Kansas hard red
+    # winter is a different crop on a different contract (KE=F) and is not
+    # fetched. Using Kansas geography against a Chicago price would be measuring
+    # the weather of a crop that contract never delivers.
+    states:
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: OH, name: Ohio, fips: "39", ncei: "33"}
+      - {postal: MO, name: Missouri, fips: "29", ncei: "23"}
+      - {postal: AR, name: Arkansas, fips: "05", ncei: "03"}
+    counties: []
+    points: []
+    notes: |
+      NCEI codes verified against the downloaded county files rather than
+      recalled: OH is NCEI 33 and FIPS 39, MO is 23 and 29, AR is 03 and 05.
+      IL and IN overlap the corn belt, which is why this crop shares two states
+      with corn and soybeans while the other three are its own.
+
+      THE SEASON IS THE FALSIFICATION TEST. Winter wheat is sown in autumn,
+      overwinters, fills grain in May and is harvested in June and July -- so by
+      the time a corn-belt drought peaks in late July, this crop is already in
+      the bin and its supply cannot be affected. If a July drought event moves
+      wheat as much as it moves corn, the move is not crop-supply news at all; it
+      is something common to agricultural futures, and that would be a caveat on
+      every price result in this project rather than a finding about wheat.
+
+      The April-to-June window is the agronomic one and is a working assumption,
+      not a probe finding. Verify against an agronomic source before treating a
+      wheat result as settled.
+
   cocoa:
     label: "West African cocoa"
     countries: ["Cote d'Ivoire", "Ghana"]

@@ -257,7 +257,9 @@ def test_a_dry_run_reports_without_writing(tmp_path: Path, capsys) -> None:
 def test_check_config_validates_both_files_and_reports_key_status(capsys) -> None:
     assert main(["check-config"]) == 0
     out = capsys.readouterr().out
-    assert "6 sources" in out and "2 crops" in out
+    from pipeline.config import DEFAULT_GEOGRAPHY_PATH, load_geography
+    crops = len(list(load_geography(DEFAULT_GEOGRAPHY_PATH)))
+    assert "6 sources" in out and f"{crops} crops" in out
     assert "config ok" in out
 
 
