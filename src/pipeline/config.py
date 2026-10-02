@@ -35,7 +35,10 @@ DEFAULT_GEOGRAPHY_PATH = "config/geography.yaml"
 DEFAULT_DOTENV_PATH = ".env"
 
 SCHEMA_VERSION = 1
-SOURCE_KINDS = frozenset({"csv", "json"})
+# "zip" is a binary payload -- a zipped ESRI shapefile set, for cpc_outlook.
+# It is listed here so a kind typo still fails loudly; nothing in this module
+# decodes a payload, so adding one needs no parsing change here.
+SOURCE_KINDS = frozenset({"csv", "json", "zip"})
 
 _SOURCE_REQUIRED = ("kind", "url_template", "params", "publication_lag_days", "notes")
 _SOURCE_OPTIONAL = ("accept", "api_key_env", "api_key_signup_url")

@@ -157,15 +157,16 @@ def test_a_response_with_no_series_is_refused() -> None:
 def test_a_dry_run_plans_a_key_per_point_year(harness, no_network) -> None:
     records = ingest_power.fetch(harness.fetch(
         "nasa_power", years=(2012, 2013), dry_run=True, today=date(2026, 9, 27)))
-    # One key per point-year, every crop that declares points, config order.
-    # Corn's five representative points are here because NASA POWER is a point
-    # API and an empty points list made the crop unreachable through it.
-    assert [r.key for r in records] == [
-        "corn/iowa/2012", "corn/iowa/2013", "corn/illinois/2012", "corn/illinois/2013",
-        "corn/nebraska/2012", "corn/nebraska/2013", "corn/minnesota/2012",
-        "corn/minnesota/2013", "corn/indiana/2012", "corn/indiana/2013",
-        "cocoa/soubre/2012", "cocoa/soubre/2013", "cocoa/daloa/2012", "cocoa/daloa/2013",
-        "cocoa/kumasi/2012", "cocoa/kumasi/2013", "cocoa/sunyani/2012", "cocoa/sunyani/2013"]
+    # One key per point-year, every crop that declares points, in config order.
+    # Derived rather than frozen: this list grew when corn gained points and again
+    # when soybeans did, and each time a literal would have failed for the wrong
+    # reason. What is under test is the key SHAPE and the ordering, not the roster.
+    from pipeline.ingest._common import slug
+    expected = [f"{crop.name}/{slug(point.name)}/{year}"
+                for crop in harness.geography for point in crop.points
+                for year in (2012, 2013)]
+    assert expected, "the shipped geography declares no points at all"
+    assert [r.key for r in records] == expected
     assert not harness.raw.manifest_path.exists()
 
 

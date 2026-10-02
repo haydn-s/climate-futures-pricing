@@ -10,3 +10,5 @@ pytest>=8.0
 # Modelling: the peek sweep in analysis/corn_peek_sweep.py
 scikit-learn>=1.5
 statsmodels>=0.14
+# CPC outlooks ship as zipped ESRI shapefiles
+pyshp>=2.3

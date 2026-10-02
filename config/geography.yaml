@@ -114,7 +114,16 @@ crops:
       - {postal: MN, name: Minnesota, fips: "27", ncei: "21"}
       - {postal: NE, name: Nebraska, fips: "31", ncei: "25"}
     counties: []
-    points: []
+    # The same five points as corn, for the same reason they are the same five
+    # states: soybeans are grown on this ground in rotation with corn. Point
+    # sources (NASA POWER, and the CPC outlook maps, which are read by
+    # point-in-polygon) cannot serve a crop that declares none.
+    points:
+      - {name: Iowa, country: United States, lat: 42.0, lon: -93.6}
+      - {name: Illinois, country: United States, lat: 40.1, lon: -88.9}
+      - {name: Nebraska, country: United States, lat: 40.8, lon: -98.4}
+      - {name: Minnesota, country: United States, lat: 44.1, lon: -94.0}
+      - {name: Indiana, country: United States, lat: 40.3, lon: -86.5}
     notes: |
       Shifted one month later than corn on purpose. Corn is made or broken at
       pollination in July; soybeans set and fill pods through August, so August

@@ -327,6 +327,87 @@ sources:
       found the fetch date is the only honest vintage -- with the stored revision
       history being what actually makes a restatement visible.
 
+  cpc_outlook:
+    kind: zip
+    url_template: "https://ftp.cpc.ncep.noaa.gov/GIS/us_tempprcpfcst/{product}{era}_{date}.zip"
+    accept: null
+    params:
+      products: [610temp, 814temp, 610prcp, 814prcp]
+      # Lead time in days from issuance to the start and end of the valid period.
+      leads:
+        "610": [6, 10]
+        "814": [8, 14]
+      date_format: "%Y%m%d"
+      # The archive is near-daily but not every day, so the directory listing is
+      # fetched once and the plan built from the filenames that actually exist.
+      # Guessing calendar dates instead means a 404 for every weekend and holiday.
+      index_url: "https://ftp.cpc.ncep.noaa.gov/GIS/us_tempprcpfcst/"
+      first_date: "2011-01-03"
+      unified_from: "2012-09-11"
+      early_until: "2012-10-09"
+      early_suffixes: [abv, bel]
+      categories: [Above, Below, Normal]
+      climatological_probability: 33.3333
+      expected_shapes: [1, 40]
+    publication_lag_days: 0
+    notes: |
+      CPC 6-10 day and 8-14 day temperature and precipitation outlooks, as
+      ESRI shapefiles in a zip, one issuance per file, near-daily from
+      2011-01-03 to the present (verified 2026-10-01: 4,920 unified issuances
+      of 610temp, archive listing reaches 2026-09-30). Keyless.
+
+      THIS IS THE ONLY SOURCE HERE THAT PUBLISHES BEFORE THE PERIOD IT
+      DESCRIBES. Every other entry in this file is late: the record exists and
+      the publication of it lags. A forecast inverts that -- Fcst_Date is the
+      day it was issued and Start_Date/End_Date are days 6-10 or 8-14 AFTER it.
+      pipeline.calendar.as_of still works unchanged and still means "what was
+      knowable then", but a forecast feature is tradeable at its publication
+      date rather than merely observable after it, which is the gap the peek
+      sweep in analysis/corn_peek_sweep.py could not close with late
+      observations. publication_lag_days is 0 for that reason and is exact, not
+      an estimate: the issuance date is in the filename and in the attributes.
+
+      THE SCHEMA CHANGED IN SEPTEMBER 2012 AND THE TWO ERAS OVERLAP.
+        unified  610temp_YYYYMMDD.zip      2012-09-11 onward, 4,920 files
+                 attributes Fcst_Date, Start_Date, End_Date (typed dates),
+                 Prob (float), Cat ("Above"/"Below"/"Normal")
+        early    610tempabv_YYYYMMDD.zip   2011-01-03 to 2012-10-09, 189 files
+                 and 610tempbel_. THE CATEGORY IS IN THE FILENAME, not in a
+                 field. Probability is the `label` attribute as a SPACE-PADDED
+                 STRING ("      33"), Fcst_Date is "MM/DD/YYYY" text, and the
+                 valid period is one combined "MM/DD/YYYY - MM/DD/YYYY" string
+                 in Valid_Per.
+      Reading only the unified pattern silently drops 189 issuances including
+      half of 2012, the year every result in this project turns on. Reading both
+      without excluding the 2012-09-11..2012-10-09 window counts that month
+      twice, once per era. Fetch the early era only before unified_from.
+
+      610temp_latest.zip IS A MOVING POINTER, NOT A VINTAGE. It is overwritten
+      in place, so archiving it records bytes that cannot be reproduced and
+      cannot be dated. Only fetch dated filenames; the listing also holds one
+      undated 610tempYYYYMMDD.zip with no separator, which is an anomaly rather
+      than a third era.
+
+      Polygons are NESTED PROBABILITY CONTOURS, not a partition: a point falls
+      inside one to three of them and the forecast for that point is the
+      innermost, i.e. the highest Prob among the polygons containing it. A point
+      inside none is covered by no contour, which means near-climatological odds
+      and NOT missing data. Verified 2026-10-01 against the five corn points:
+      the 2012-07-10 above-normal file put Iowa at 40% and Minnesota and
+      Indiana at 50%, the peak of that drought, while 2023-07-11 read "Normal"
+      36% across the belt with Nebraska at 40% above.
+
+      Cat has three values and the map shows only the LEADING tercile, so the
+      honest scalar is a signed anomaly against climatology: Above gives
+      +(Prob - 33.33), Below gives -(Prob - 33.33), Normal gives 0. A raw Prob
+      is not comparable across categories -- 60% Below is the opposite of 60%
+      Above, and averaging them reads as agreement.
+
+      Geometry is lon/lat in NAD83 (the .prj says GCS_North_American_1983), so
+      coordinates are already degrees and need no projection to test a point
+      from config/geography.yaml. Reading the pair as (lat, lon) puts the corn
+      belt in the Indian Ocean and silently matches nothing.
+
   nass_production:
     kind: json
     url_template: "https://quickstats.nass.usda.gov/api/api_GET/?key={key}&source_desc={source_desc}&sector_desc={sector_desc}&commodity_desc={commodity_desc}&statisticcat_desc={statisticcat_desc}&agg_level_desc={agg_level_desc}&state_alpha={state_alpha}&year={year}&format={format}"
