@@ -31,6 +31,7 @@ from ._common import archived, matches_any
 
 TABLE = "owid_yields_annual"
 VALUE = "yield_t_per_ha"
+PRODUCTION = "production_t"
 
 
 def clean(request: CleanRequest) -> list:
@@ -76,6 +77,35 @@ def clean(request: CleanRequest) -> list:
     table[VALUE] = pd.to_numeric(table[VALUE], errors="coerce")
     table = (table[["crop", "entity", "code", "year", VALUE, PUBLICATION_COLUMN]]
              .sort_values(["crop", "entity", "year"]).reset_index(drop=True))
+
+    # Production, where a slug was configured for it. Joined rather than
+    # concatenated: one row per crop-country-year carrying both measures, so
+    # area can be recovered as production / yield and a bloc aggregate computed
+    # as total production over total area. A mean of yields is not that.
+    production_slugs = {str(crop): str(slug)
+                        for crop, slug in (request.spec.params.get("production_slugs") or {}).items()}
+    produced: list[pd.DataFrame] = []
+    for crop_name, slug in production_slugs.items():
+        if slug not in bodies:
+            print(f"  note: {slug} not archived, so {crop_name} has no production column")
+            continue
+        record, body = bodies[slug]
+        rows, column = client.parse(body, url=str(record.path))
+        frame = pd.DataFrame(rows)
+        wanted = _countries(request, crop_name)
+        if wanted:
+            frame = frame[frame["entity"].map(lambda e: matches_any(e, wanted))]
+        frame = frame.rename(columns={column: PRODUCTION})
+        frame["crop"] = crop_name
+        frame["year"] = pd.to_numeric(frame["year"], errors="coerce").astype("Int64")
+        frame[PRODUCTION] = pd.to_numeric(frame[PRODUCTION], errors="coerce")
+        produced.append(frame[["crop", "entity", "year", PRODUCTION]])
+    if produced:
+        table = table.merge(pd.concat(produced, ignore_index=True),
+                            on=["crop", "entity", "year"], how="left")
+        have = int(table[PRODUCTION].notna().sum())
+        print(f"  {have} row(s) also carry production, so area is recoverable "
+              f"as production / yield")
 
     unpublished = int(table[PUBLICATION_COLUMN].isna().sum())
     print(f"  {len(table)} crop-country-years, {table['crop'].nunique()} crop(s), "

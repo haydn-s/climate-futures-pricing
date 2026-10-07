@@ -141,11 +141,19 @@ def test_corn_counties_are_a_placeholder_not_a_silent_empty_weighting(repo_root:
 
 
 def test_cocoa_keeps_the_schema_from_being_corn_only(repo_root: Path) -> None:
+    """A crop can be described by points and countries alone, with no US states.
+
+    The property, not the roster: cocoa's producer list grew from two countries
+    to the five-member West African bloc so that cross-border transfers would
+    cancel in an aggregate, and a frozen list failed for that rather than for
+    anything about the schema.
+    """
     cocoa = load_geography(repo_root / GEOGRAPHY).crop("cocoa")
     assert cocoa.states == () and cocoa.counties == ()
-    assert [point.name for point in cocoa.points] == ["Soubre", "Daloa", "Kumasi", "Sunyani"]
-    assert {point.country for point in cocoa.points} == {"Cote d'Ivoire", "Ghana"}
-    assert cocoa.countries == ("Cote d'Ivoire", "Ghana")
+    assert cocoa.points, "cocoa is described by points"
+    assert cocoa.countries, "and by producer countries"
+    # Every point belongs to a declared producer, or it is weighted by nothing.
+    assert {point.country for point in cocoa.points} <= set(cocoa.countries)
     assert cocoa.sensitive_months.months() == (6, 7, 8, 9)
 
 

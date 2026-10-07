@@ -189,7 +189,7 @@ crops:
 
   cocoa:
     label: "West African cocoa"
-    countries: ["Cote d'Ivoire", "Ghana"]
+    countries: ["Cote d'Ivoire", "Ghana", "Nigeria", "Cameroon", "Togo"]
     sensitive_months:
       start: 6
       end: 9
@@ -204,6 +204,15 @@ crops:
       - {name: Daloa, country: "Cote d'Ivoire", lat: 6.9, lon: -6.4}
       - {name: Kumasi, country: Ghana, lat: 6.7, lon: -1.6}
       - {name: Sunyani, country: Ghana, lat: 7.3, lon: -2.3}
+      # The rest of the West African bloc. Ondo State grows most of Nigeria's
+      # cocoa, Cameroon's sits in the Centre and South regions, and Togo's is in
+      # the south-west near Kpalime. Representative points, like the four above:
+      # one location stands in for a country's cocoa belt, and that is a coarser
+      # approximation for Nigeria and Cameroon than for the others because their
+      # growing areas are more dispersed.
+      - {name: Ondo, country: Nigeria, lat: 7.1, lon: 5.1}
+      - {name: Mbalmayo, country: Cameroon, lat: 3.5, lon: 11.5}
+      - {name: Kpalime, country: Togo, lat: 6.9, lon: 0.6}
     notes: |
       The contrast case: a tree crop damaged over months rather than over a week
       of heat, so its weather signal should reach price more slowly. Cocoa has no

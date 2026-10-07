@@ -39,8 +39,15 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
     if request.years or request.months or request.states:
         print("  note: this source has no scope filters; the table is annual and global")
 
+    # Production is fetched under its own key so the yield keys stay stable and
+    # are not re-downloaded; the two measures are joined at clean time.
+    production = {str(crop): str(slug)
+                  for crop, slug in (request.spec.params.get("production_slugs") or {}).items()}
+    plan = [(crop, slug, "yield") for crop, slug in slugs.items()]
+    plan += [(crop, slug, "production") for crop, slug in production.items()]
+
     records: list[RawRecord] = []
-    for crop, slug in slugs.items():
+    for crop, slug, measure in plan:
         if request.dry_run:
             records.append(planned(request.raw, request.spec.name, slug,
                                    client.url(request.spec, slug)))
@@ -52,7 +59,8 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
         records.append(request.raw.save(
             request.spec.name, slug, body,
             url=target,
-            params={"crop": crop, "slug": slug, "value_column": column, "rows": len(rows),
+            params={"crop": crop, "slug": slug, "measure": measure,
+                    "value_column": column, "rows": len(rows),
                     "entities": len({row["entity"] for row in rows}),
                     "first_year": years[0] if years else None,
                     "last_year": years[-1] if years else None,

@@ -117,8 +117,18 @@ def test_matching_is_by_prefix_so_a_qualifier_does_not_break_the_join() -> None:
 
 
 def test_a_dry_run_plans_one_key_per_slug(harness, no_network) -> None:
+    """One key per slug, yield slugs AND production slugs.
+
+    Derived from the shipped config: production was added as a parallel slug map
+    so a bloc's area could be recovered, and a frozen list failed for that rather
+    than for anything behavioural.
+    """
+    spec = harness.sources["owid_yields"]
+    expected = sorted(list(spec.params["slugs"].values())
+                      + list((spec.params.get("production_slugs") or {}).values()))
     records = ingest_owid.fetch(harness.fetch("owid_yields", dry_run=True))
-    assert sorted(record.key for record in records) == ["cocoa-bean-yields", "maize-yields"]
+    assert sorted(record.key for record in records) == expected
+    assert len(expected) > len(spec.params["slugs"]), "production slugs are planned too"
     assert not harness.raw.manifest_path.exists()
 
 

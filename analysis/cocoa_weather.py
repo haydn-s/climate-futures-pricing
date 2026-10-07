@@ -147,9 +147,67 @@ def build(daily: pd.DataFrame, years: range) -> dict[str, pd.DataFrame]:
     return tables
 
 
+# --------------------------------------------------------------------- the bloc
+
+
+def bloc_yield(cocoa: pd.DataFrame, countries: list[str]) -> pd.Series:
+    """Total production over total area, for a group of countries.
+
+    THE WHOLE POINT OF AGGREGATING. If beans are smuggled from Ghana into Cote
+    d'Ivoire, Ghana's recorded production falls and Cote d'Ivoire's rises by the
+    same tonnage while neither country's planted area moves -- so the transfer
+    cancels exactly in a total that contains both, and what survives is the
+    weather. That only works on a SUM, not on a mean of the two yields, and the
+    sum needs area, which FAO does not publish here: it is recovered as
+    production / yield per country per year.
+    """
+    rows = cocoa.loc[cocoa["entity"].isin(countries)
+                     & cocoa["yield_t_per_ha"].notna()
+                     & cocoa["production_t"].notna()
+                     & (cocoa["yield_t_per_ha"] > 0)].copy()
+    rows["area_ha"] = rows["production_t"] / rows["yield_t_per_ha"]
+    grouped = rows.groupby("year").agg(production=("production_t", "sum"),
+                                       area=("area_ha", "sum"),
+                                       n=("entity", "nunique"))
+    # Only years where every country reported, or the bloc changes composition
+    # mid-series and a country entering looks like a yield shock.
+    complete = grouped.loc[grouped["n"] == len(countries)]
+    return (complete["production"] / complete["area"]).astype(float)
+
+
+def bloc_weather(power: pd.DataFrame, geography, weights: dict[str, float],
+                 months: list[tuple[int, int]], year: int) -> dict[str, float] | None:
+    """Production-weighted belt weather: average within a country, then across.
+
+    Weighting matters here for the same reason it does in the yield: Togo grows
+    about 0.4% of the world's cocoa and Cote d'Ivoire about a third, so an
+    unweighted mean of points would let the smallest producer move the index as
+    much as the largest.
+    """
+    point_country = {point.name: point.country
+                     for crop in geography for point in crop.points if crop.name == CROP}
+    rows = power.loc[power["crop"] == CROP].copy()
+    rows["country"] = rows["point"].map(point_country)
+    per_country = (rows.groupby(["country", "date"], as_index=False)
+                   .agg(tmax_c=("tmax_c", "mean"), precip_mm=("precip_mm", "mean")))
+
+    parts: dict[str, dict[str, float]] = {}
+    for country, weight in weights.items():
+        daily = (per_country.loc[per_country["country"] == country, ["date", "tmax_c", "precip_mm"]]
+                 .sort_values("date", ignore_index=True))
+        features = window_features(daily, months, year)
+        if features is None:
+            return None
+        parts[country] = features
+    total = sum(weights.values())
+    return {measure: sum(parts[c][measure] * w for c, w in weights.items()) / total
+            for measure in MEASURES}
+
+
 def main() -> None:
     store = ProcessedStore(default_data_root())
-    daily = belt_daily(store.read("nasa_power_point_daily"))
+    power_raw = store.read("nasa_power_point_daily")
+    daily = belt_daily(power_raw)
     yields = store.read("owid_yields_annual")
     cocoa = yields.loc[yields["crop"] == CROP]
 
@@ -199,6 +257,7 @@ def main() -> None:
         print("  validated against them the way corn's was against US yields. Every")
         print("  correlation below inherits that caveat; the belt mean is reported for")
         print("  continuity with the previews but is the worst of the three targets.")
+    shortfalls_members = list(shortfalls.values())
     shortfalls["belt (mean)"] = belt_shortfall
     print(f"yields:  {', '.join(sorted(in_window['entity'].unique()))}, "
           f"detrended over {int(span.index.min())}..{int(span.index.max())} "
@@ -267,6 +326,98 @@ def main() -> None:
     print("  about whether cocoa cares about weather, which it plainly does.")
 
     # ------------------------------------------------------------- the 2024 spike
+    # ------------------------------------------------------------- the bloc test
+    print("\n" + "=" * 72)
+    print("THE BLOC TEST: does aggregating cancel the cross-border transfers?")
+    from pipeline.config import load_geography
+    geography = load_geography()
+    countries = sorted(set(in_window["entity"].unique()))
+    bloc = bloc_yield(in_window, countries)
+    if bloc.empty:
+        print("  no year has all countries reporting both yield and production")
+    else:
+        bloc_short = detrend_pct(bloc)
+        shares = (in_window.loc[in_window["production_t"].notna()]
+                  .groupby("entity")["production_t"].mean())
+        shares = shares / shares.sum()
+        print(f"  bloc: {', '.join(countries)}")
+        print("  long-run production shares: "
+              + ", ".join(f"{c} {shares.get(c, 0):.0%}" for c in countries))
+        print(f"  aggregate yield = total production / total area, "
+              f"{int(bloc.index.min())}..{int(bloc.index.max())}")
+        print(f"  shortfall sd {bloc_short.std():.3f} against a mean of the "
+              f"members' sds of {pd.concat(shortfalls_members, axis=1).std().mean():.3f}")
+        worst = bloc_short.dropna().nsmallest(3)
+        print("  worst bloc years: "
+              + ", ".join(f"{int(y)} {v:+.0%}" for y, v in worst.items()))
+
+        weights = {c: float(shares.get(c, 0.0)) for c in countries}
+        print(f"\n  {'window':20s} {'measure':15s} {'same yr':>9s} {'':3s} {'lagged':>9s}")
+        bloc_tests = 0
+        for name, months in WINDOWS.items():
+            rows = {}
+            for year in years:
+                features = bloc_weather(power_raw, geography, weights, months, year)
+                if features is not None:
+                    rows[year] = features
+            if not rows:
+                print(f"  {name:20s} -- no complete windows")
+                continue
+            table = pd.DataFrame(rows).T
+            for measure in MEASURES:
+                same_r, n, same_p = correlate(table[measure], bloc_short)
+                lagged = table[measure].copy()
+                lagged.index = lagged.index + 1
+                lag_r, _, lag_p = correlate(lagged, bloc_short)
+                bloc_tests += 2
+                print(f"  {name:20s} {measure:15s} {same_r:+8.2f} {stars(same_p):3s} "
+                      f"{lag_r:+8.2f} {stars(lag_p):3s}   n={n}")
+        print(f"\n  {bloc_tests} tests, about {bloc_tests * 0.05:.0f} significant by chance.")
+
+        # The only number here that searching cannot manufacture -- though see the
+        # caveat printed below it, which matters.
+        from sklearn.linear_model import Ridge
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        lagged_pod = {}
+        for year in years:
+            features = bloc_weather(power_raw, geography, weights,
+                                    WINDOWS["main_pod Jun-Sep"], year)
+            if features is not None:
+                lagged_pod[year + 1] = features     # weather of Y -> harvest Y+1
+        pod = pd.DataFrame(lagged_pod).T
+        print("\n  OUT OF SAMPLE, leave-one-year-out, trend refitted inside each fold")
+        for columns in (["max_dry_spell"], ["max_dry_spell", "dry_days"],
+                        ["max_dry_spell", "dry_days", "heat_dd32"]):
+            shared = np.array(sorted(set(pod.index) & set(bloc.index)))
+            predicted, actual = [], []
+            for held in shared:
+                train = shared[shared != held]
+                short = detrend_pct(bloc.loc[shared], fit_years=train).dropna()
+                if held not in short.index:
+                    continue
+                index = np.array(short.index)
+                model = make_pipeline(StandardScaler(), Ridge(alpha=1.0))
+                in_train = np.isin(index, train)
+                model.fit(pod.loc[index][columns][in_train], short.to_numpy()[in_train])
+                predicted.append(float(model.predict(pod.loc[[held]][columns])[0]))
+                actual.append(float(short.loc[held]))
+            predicted, actual = np.array(predicted), np.array(actual)
+            r2 = 1 - ((actual - predicted) ** 2).sum() / ((actual - actual.mean()) ** 2).sum()
+            print(f"    {', '.join(columns):42s} n={len(actual):2d}  "
+                  f"R2 {r2:+.3f}  r {np.corrcoef(predicted, actual)[0, 1]:+.2f}")
+        print("\n  CAVEAT THAT TRAVELS WITH THAT R-SQUARED: the window and the measures")
+        print("  were chosen by looking at the 56 correlations above, on this same data.")
+        print("  Leave-one-year-out protects the coefficients, not the specification, so")
+        print("  this is optimistic and is not a clean out-of-sample validation. The")
+        print("  stronger argument is the COHERENCE -- every significant cell is a")
+        print("  dryness measure, positive, and lagged, which noise does not do.")
+        print("  If the aggregate shows a coherent signal where the members contradict")
+        print("  each other, the transfers cancelled and the weather was underneath all")
+        print("  along. If it shows nothing either, the weather signal is genuinely weak")
+        print("  and the smuggling story explains only why the members disagreed.")
+
     print("\n" + "=" * 72)
     print("THE 2024 PRICE SPIKE: was the weather exceptional too?")
     prices = store.read("yahoo_prices_daily")

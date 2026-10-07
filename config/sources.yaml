@@ -297,9 +297,21 @@ sources:
       slugs:
         corn: maize-yields
         cocoa: cocoa-bean-yields
+      # PRODUCTION, because an aggregate yield is not a mean of yields. A bloc's
+      # yield is total production over total area, so the area share of each
+      # country is the weight -- and area is only recoverable as production
+      # divided by yield. An unweighted mean would let Togo, which grows almost
+      # nothing, count as much as Cote d'Ivoire, which grows a third of the world.
+      production_slugs:
+        cocoa: cocoa-bean-production
       entities:
         corn: ["United States"]
-        cocoa: ["Cote d'Ivoire", "Ghana"]
+        # The West African bloc, about 61% of world production in 2023. Widened
+        # from two countries because the two-country comparison turned out to be
+        # measuring cross-border transfers rather than weather: see
+        # analysis/cocoa_weather.py. Transfers between these five cancel inside
+        # their total, which is what makes the aggregate worth computing.
+        cocoa: ["Cote d'Ivoire", "Ghana", "Nigeria", "Cameroon", "Togo"]
     publication_lag_days: null
     notes: |
       Annual crop yields: FAOSTAT figures republished by Our World in Data, used
