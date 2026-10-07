@@ -403,6 +403,26 @@ sources:
       is not comparable across categories -- 60% Below is the opposite of 60%
       Above, and averaging them reads as agreement.
 
+      TWO UPSTREAM ANOMALIES, both found by backfilling and neither a bug here.
+      An outlook can hold ZERO polygons: CPC draws no contours when it expects no
+      significant departure anywhere, so 814prcp for 2014-07-19 is 13 KB with no
+      records while 814temp that day has twelve. That is a forecast of
+      climatological odds everywhere, not a corrupt file -- but its dates live in
+      the attributes it does not have, so they come from the filename and these
+      lead times instead. And a file can carry the WRONG PRODUCT: on 2018-07-30
+      610prcp served the 8-14 day precipitation map (valid Aug 7-13) while
+      610temp that day was correctly 6-10 (Aug 5-9), and 610prcp was right on the
+      days either side.
+
+      Both used to raise, and each one stopped a backfill dead -- the empty file
+      at 1,999 of 12,558 and the mislabelled one at 5,444. Neither does now:
+      anomalies are recorded in the manifest params beside the archived bytes,
+      and pipeline.clean.cpc_outlook refuses to build a row from a file whose
+      lead contradicts its own filename. The archive keeps the evidence; the
+      table stays honest. Reading an 8-14 day forecast as a 6-10 day one would
+      silently corrupt the horizon comparison that is the reason both products
+      are fetched.
+
       Geometry is lon/lat in NAD83 (the .prj says GCS_North_American_1983), so
       coordinates are already degrees and need no projection to test a point
       from config/geography.yaml. Reading the pair as (lat, lon) puts the corn

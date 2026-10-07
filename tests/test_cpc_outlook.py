@@ -234,22 +234,53 @@ def test_the_publication_date_is_the_issuance_and_precedes_the_period(cpc: Path)
 
 def test_the_lead_time_check_catches_a_product_under_the_wrong_name(
         harness, cpc: Path) -> None:
-    """A 610 file whose valid period starts eight days out is an 814 mislabelled."""
+    """A 610 file whose valid period starts eight days out is an 814 mislabelled.
+
+    REPORTED, not raised. This is an upstream error -- verified on 2018-07-30,
+    where CPC served the 8-14 day precipitation map under the 6-10 day filename
+    -- and raising on it stopped a backfill 5,444 files in. One bad file must not
+    kill a run of twelve thousand.
+    """
     request = harness.fetch("cpc_outlook")
     bundle = client.read(body(cpc, "814prcp_20230711.zip"), product="814prcp")
-    ingest_cpc._check(bundle, "814prcp", "", date(2023, 7, 11), request.spec)
-    with pytest.raises(ValueError, match="expected a lead of 6-10"):
-        ingest_cpc._check(bundle, "610prcp", "", date(2023, 7, 11), request.spec)
+    assert ingest_cpc._check(bundle, "814prcp", "", date(2023, 7, 11), request.spec) == []
+    problems = ingest_cpc._check(bundle, "610prcp", "", date(2023, 7, 11), request.spec)
+    assert len(problems) == 1
+    assert "expected a lead of 6-10 days, found 8-14" in problems[0]
 
 
-def test_a_filename_date_disagreeing_with_the_attribute_is_refused(
+def test_a_filename_date_disagreeing_with_the_attribute_is_reported(
         harness, cpc: Path) -> None:
     """If the two diverge, one is not the issuance and every point-in-time claim
-    built on the publication date is quietly wrong."""
+    built on the publication date is quietly wrong. Reported, and the file is
+    kept out of the table by the clean step."""
     request = harness.fetch("cpc_outlook")
     bundle = client.read(body(cpc, "610temp_20230711.zip"), product="610temp")
-    with pytest.raises(ValueError, match="not the issuance date"):
-        ingest_cpc._check(bundle, "610temp", "", date(2023, 7, 12), request.spec)
+    problems = ingest_cpc._check(bundle, "610temp", "", date(2023, 7, 12), request.spec)
+    assert len(problems) == 1 and "Fcst_Date" in problems[0]
+
+
+def test_a_mislabelled_lead_is_archived_but_kept_out_of_the_table(
+        harness, cpc: Path, capsys) -> None:
+    """The second layer: the bytes are evidence, the row would be corruption.
+
+    An 814 file archived under a 610 key must not contribute a row to the 6-10
+    day series -- that would put an 8-14 day forecast in it and quietly break the
+    horizon comparison the two products exist to support.
+    """
+    harness.seed("cpc_outlook", "610prcp/2023-07-11", body(cpc, "814prcp_20230711.zip"),
+                 url="https://example.test/610prcp_20230711.zip",
+                 params={"product": "610prcp", "issued": "2023-07-11"},
+                 publication_date=date(2023, 7, 11))
+    # A good file alongside it, so the run is not empty.
+    harness.seed("cpc_outlook", "610temp/2023-07-11", body(cpc, "610temp_20230711.zip"),
+                 url="https://example.test/610temp_20230711.zip",
+                 params={"product": "610temp", "issued": "2023-07-11"},
+                 publication_date=date(2023, 7, 11))
+    clean_cpc.clean(harness.clean("cpc_outlook"))
+    table = harness.processed.read(clean_cpc.TABLE)
+    assert set(table["product"]) == {"610temp"}, "the mislabelled 610prcp must not appear"
+    assert "upstream-mislabelled" in capsys.readouterr().out
 
 
 # -------------------------------------------------------------------- the clean

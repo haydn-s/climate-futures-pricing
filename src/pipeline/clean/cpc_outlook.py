@@ -55,6 +55,7 @@ def clean(request: CleanRequest) -> list[str]:
 
     rows: list[dict] = []
     unreadable: list[str] = []
+    mislabelled: list[str] = []
     for record, body in archived(request.raw, request.spec.name):
         product = str(record.params.get("product") or record.key.split("/")[0])
         category = record.params.get("category")
@@ -69,6 +70,16 @@ def clean(request: CleanRequest) -> list[str]:
         except client.OutlookError as exc:
             unreadable.append(f"{record.key}: {exc}")
             continue
+        # The second layer. A file whose own lead contradicts its filename is an
+        # upstream mislabelling (see ingest._check): archived as evidence, but a
+        # row built from it would put an 8-14 day forecast in the 6-10 day
+        # series and quietly corrupt the horizon comparison.
+        expected = request.spec.params.get("leads", {}).get(product[:3])
+        if expected and bundle.contours:
+            low, high = int(expected[0]), int(expected[1])
+            if (bundle.lead_days, (bundle.valid_end - bundle.issued).days) != (low, high):
+                mislabelled.append(f"{record.key} (lead {bundle.lead_days}, expected {low})")
+                continue
         for crop, point in points:
             contour = client.best(bundle.contours, point.lat, point.lon)
             rows.append({
@@ -118,6 +129,10 @@ def clean(request: CleanRequest) -> list[str]:
     if unreadable:
         print(f"    {len(unreadable)} unreadable file(s): {unreadable[0]}"
               + (f" (+{len(unreadable) - 1} more)" if len(unreadable) > 1 else ""))
+    if mislabelled:
+        print(f"    {len(mislabelled)} file(s) excluded as upstream-mislabelled: "
+              f"{mislabelled[0]}"
+              + (f" (+{len(mislabelled) - 1} more)" if len(mislabelled) > 1 else ""))
     return [str(path)]
 
 

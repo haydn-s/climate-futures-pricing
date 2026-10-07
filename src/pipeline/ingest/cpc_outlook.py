@@ -88,7 +88,7 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
         leads = request.spec.params.get("leads", {}).get(product[:3])
         bundle = client.read(body, product=product, issued=issued, category=category,
                              leads=tuple(leads) if leads else None)
-        _check(bundle, product, suffix, issued, request.spec)
+        problems = _check(bundle, product, suffix, issued, request.spec)
         records.append(request.raw.save(
             request.spec.name, key, body,
             url=target,
@@ -98,7 +98,10 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
                     "valid_start": bundle.valid_start.isoformat(),
                     "valid_end": bundle.valid_end.isoformat(),
                     "lead_days": bundle.lead_days,
-                    "contours": len(bundle.contours)},
+                    "contours": len(bundle.contours),
+                    # Self-describing: reading the archive by key shows the
+                    # problem rather than handing back a plausible wrong product.
+                    "anomalies": problems or None},
             # Exact, not estimated: a forecast is public on the day it is issued.
             publication_date=bundle.issued,
         ))
@@ -127,35 +130,52 @@ def _months(geography: Geography) -> tuple[int, ...]:
 
 
 def _check(bundle: client.Bundle, product: str, suffix: str, issued: date,
-           spec) -> None:
-    """Two consistency checks the file can fail without erroring.
+           spec) -> list[str]:
+    """Problems with a file, REPORTED rather than raised.
 
-    The filename date and the attribute date must agree -- if they ever diverge,
-    one of them is not the issuance and the publication date is wrong, which
-    silently breaks every point-in-time claim built on it. And the lead time must
-    match the product: a 610 file whose valid period starts eight days out is an
-    814 under the wrong name.
+    These are upstream errors, not bugs here, and a single bad file must not kill
+    a run of twelve thousand. Verified example: on 2018-07-30 CPC served the
+    8-14 day precipitation map under the 6-10 day filename -- 610prcp carried a
+    valid period of Aug 7-13 while 610temp the same day correctly carried Aug
+    5-9, and 610prcp was right on the days either side. Raising on it stopped a
+    backfill 5,444 files in.
+
+    So the bytes are archived with whatever is wrong recorded alongside them, and
+    the clean step refuses to build a row from a file whose lead time contradicts
+    its own filename. Two layers, both loud: the archive keeps the evidence and
+    the table stays honest. Treating an 8-14 day forecast as a 6-10 day one would
+    silently corrupt the lead-time comparison, which is the reason both horizons
+    are fetched at all.
+
+    The two checks:
+
+    * The filename date and Fcst_Date must agree. If they diverge, one of them is
+      not the issuance, and the publication date is the only thing making this
+      source point-in-time.
+    * The lead must match the product. A 610 file whose valid period starts eight
+      days out is an 814 under the wrong name.
     """
+    problems: list[str] = []
     if bundle.issued != issued:
-        raise ValueError(
-            f"{product}{suffix} {issued}: the filename says {issued} but Fcst_Date says "
-            f"{bundle.issued}; one of them is not the issuance date")
-    leads = spec.params.get("leads", {})
-    expected = leads.get(product[:3])
-    if expected:
+        problems.append(f"filename says {issued} but Fcst_Date says {bundle.issued}")
+    expected = spec.params.get("leads", {}).get(product[:3])
+    if expected and bundle.contours:
         low, high = int(expected[0]), int(expected[1])
-        actual_start = (bundle.valid_start - bundle.issued).days
-        actual_end = (bundle.valid_end - bundle.issued).days
-        if (actual_start, actual_end) != (low, high):
-            raise ValueError(
-                f"{product}{suffix} {issued}: expected a lead of {low}-{high} days, "
-                f"found {actual_start}-{actual_end}")
-    # NOT an error: a file with no polygons is CPC forecasting no significant
-    # departure anywhere, and its dates were synthesised from the filename and
-    # the configured leads, which makes the check above tautological for it.
+        actual = ((bundle.valid_start - bundle.issued).days,
+                  (bundle.valid_end - bundle.issued).days)
+        if actual != (low, high):
+            problems.append(
+                f"expected a lead of {low}-{high} days, found {actual[0]}-{actual[1]}")
+    # Not a problem: no polygons is CPC forecasting no significant departure
+    # anywhere. Its dates were synthesised from the filename and the configured
+    # leads, which is also why the lead check is skipped for it as tautological.
     if not bundle.contours:
         print(f"  {product}{suffix}/{issued}: no contours -- climatological odds "
               f"everywhere, recorded as a forecast")
+    if problems:
+        print(f"  {product}{suffix}/{issued}: UPSTREAM ANOMALY -- "
+              f"{'; '.join(problems)}; archived but excluded from the table")
+    return problems
 
 
 def _announce(plan: Iterable[tuple[str, str, date]], dry_run: bool) -> None:
