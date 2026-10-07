@@ -11,6 +11,8 @@ Each is a zipped ESRI shapefile set, exactly as the archive serves it.
 | `610tempbel_20120710.zip` | early schema, below-normal, same day | The other half of one early issuance. An early forecast is split across two files, so a point gets two rows for the same product-day and the clean step has to collapse them. Keeping both double-counts; keeping the wrong one reads a cold forecast as a hot one. |
 | `814prcp_20230711.zip` | unified, 8-14 day precipitation | A different horizon and variable, to check the lead-time assertion is read from the product rather than assumed: this file's valid period must start 8 days after issuance, not 6. |
 
+| `814prcp_20140719.zip` | unified, **zero polygons** | An outlook can legitimately hold no contours at all: CPC draws none when it expects no significant departure anywhere. 13 KB with `shapes=0`, while `814temp` the same day has twelve. Raising on it stopped two full backfill runs dead at this exact date, 1,999 files into 12,558. The dbf's *schema* survives with no records, so the era is still readable; only the dates are gone, since those live in the attributes. |
+
 ## Why these dates
 
 `2012-07-10` is the peak of the 2012 drought, the year every result in this
