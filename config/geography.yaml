@@ -151,7 +151,24 @@ crops:
       - {postal: MO, name: Missouri, fips: "29", ncei: "23"}
       - {postal: AR, name: Arkansas, fips: "05", ncei: "03"}
     counties: []
-    points: []
+    # One representative point per state, and DELIBERATELY NOT corn's points for
+    # the two states they share. Soft red winter wheat is grown in the southern
+    # third of Illinois and the south-west of Indiana, not the central corn
+    # country -- Illinois here is near Mount Vernon at 38.5 against corn's 40.1,
+    # and Indiana near Vincennes at 38.7 against corn's 40.3. Reusing corn's
+    # points would have read the weather of the wrong half of both states.
+    #
+    # These are representative assumptions rather than probe findings, exactly as
+    # corn's and cocoa's are: a single point stands in for a state's wheat belt.
+    # They exist because the point sources -- NASA POWER, and the CPC outlook
+    # maps, which are read by point-in-polygon -- cannot serve a crop that
+    # declares none, which is why wheat was absent from the forecast table.
+    points:
+      - {name: Illinois, country: United States, lat: 38.5, lon: -89.0}
+      - {name: Indiana, country: United States, lat: 38.7, lon: -87.5}
+      - {name: Ohio, country: United States, lat: 41.0, lon: -83.7}
+      - {name: Missouri, country: United States, lat: 37.3, lon: -89.6}
+      - {name: Arkansas, country: United States, lat: 35.8, lon: -90.7}
     notes: |
       NCEI codes verified against the downloaded county files rather than
       recalled: OH is NCEI 33 and FIPS 39, MO is 23 and 29, AR is 03 and 05.

@@ -36,6 +36,23 @@ def cpc(fixtures: Path) -> Path:
     return fixtures / "cpc"
 
 
+def conus_points(geography) -> list[tuple[str, str]]:
+    """Every (crop, point) the CPC source can read: inside the CONUS.
+
+    Derived rather than frozen. These counts have now moved twice -- when
+    soybeans gained points and again when wheat did -- and each time a literal
+    failed for the wrong reason. What is under test is that one row is produced
+    per readable point, not how many crops happen to declare them.
+    """
+    inside = []
+    for crop in geography:
+        for point in crop.points:
+            if (clean_cpc.CONUS_LAT[0] <= point.lat <= clean_cpc.CONUS_LAT[1]
+                    and clean_cpc.CONUS_LON[0] <= point.lon <= clean_cpc.CONUS_LON[1]):
+                inside.append((crop.name, point.name))
+    return inside
+
+
 def body(cpc: Path, name: str) -> bytes:
     return (cpc / name).read_bytes()
 
@@ -301,10 +318,11 @@ def test_cleaning_keeps_normal_odds_and_drops_points_off_the_continent(
 
     # Corn and soybeans each declare the same five CONUS points; cocoa's four are
     # in West Africa and must be excluded rather than read as normal odds.
-    assert set(table["crop"]) == {"corn", "soybeans"}
-    assert "cocoa" not in set(table["crop"])
+    expected = conus_points(harness.geography)
+    assert set(table["crop"]) == {crop for crop, _ in expected}
+    assert "cocoa" not in set(table["crop"]), "West African points are off the map"
     assert "outside the CONUS" in out
-    assert len(table) == 10
+    assert len(table) == len(expected)
     # Every row is a forecast, including the uncovered ones.
     assert table["anomaly"].notna().all()
     assert (table.loc[~table["covered"], "anomaly"] == 0.0).all()
@@ -325,7 +343,7 @@ def test_cleaning_collapses_the_early_eras_two_files_into_one_row(
     clean_cpc.clean(harness.clean("cpc_outlook"))
     table = harness.processed.read(clean_cpc.TABLE)
 
-    assert len(table) == 10, "five points x two crops, one row each"
+    assert len(table) == len(conus_points(harness.geography)), "one row per CONUS point"
     iowa = table.loc[(table["crop"] == "corn") & (table["point"] == "Iowa")]
     assert len(iowa) == 1
     # July 2012: the above-normal file is the one that said something.
@@ -381,7 +399,7 @@ def test_cleaning_an_empty_outlook_gives_every_point_normal_odds(
                  publication_date=date(2014, 7, 19))
     clean_cpc.clean(harness.clean("cpc_outlook"))
     table = harness.processed.read(clean_cpc.TABLE)
-    assert len(table) == 10, "five points x two crops, all uncovered"
+    assert len(table) == len(conus_points(harness.geography)), "one row per CONUS point"
     assert (table["anomaly"] == 0.0).all()
     assert (~table["covered"]).all()
     assert (table["category"] == "Normal").all()
