@@ -38,6 +38,18 @@ DEFAULT_START_YEAR = 2011
 # ~9 KB early); only used to warn before a large pull.
 APPROX_BYTES = 110_000
 
+# Statuses that mean "the listing offers it but the server will not serve it".
+# 403 belongs here because this archive has per-file permission faults, not
+# because a permission error is ever worth retrying -- it is deliberately NOT in
+# pipeline.http.RETRY_STATUSES.
+UNAVAILABLE_STATUSES = frozenset({403, 404})
+
+# Consecutive refusals that stop the run rather than being skipped. Scattered
+# refusals are an upstream fact; a run of them is this project being blocked, and
+# the difference matters because quietly skipping thousands would produce an
+# archive whose holes look like data.
+BLOCKED_AFTER = 25
+
 
 def fetch(request: FetchRequest) -> list[RawRecord]:
     params = request.spec.params
@@ -66,6 +78,8 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
     _announce(plan, request.dry_run)
 
     records: list[RawRecord] = []
+    unavailable = 0
+    consecutive = 0
     for product, suffix, issued in plan:
         key = _key(product, suffix, issued)
         target = client.url(request.spec, product, issued, suffix=suffix)
@@ -78,12 +92,31 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
             body, _headers, target = client.download(
                 request.spec, product, issued, suffix=suffix)
         except FetchError as exc:
-            if exc.status == 404:
-                # The listing said it was there; a 404 now means the archive moved
-                # under us. Say which one and keep going rather than losing the run.
-                print(f"  {key}: listed but 404 on fetch, skipping")
+            if exc.status in UNAVAILABLE_STATUSES:
+                # A file the listing offers but the server will not serve. 404
+                # means it moved under us; 403 means its permissions are wrong
+                # upstream, which happens per FILE and not per date -- verified
+                # 2022-10-31, where 610temp, 814temp and 814prcp are all 403
+                # while 610prcp the same day is 200 and the neighbouring days
+                # are fine.
+                unavailable += 1
+                consecutive += 1
+                print(f"  {key}: listed but HTTP {exc.status}, skipping")
+                # SCATTERED permission errors are an upstream fact; a RUN of them
+                # is this project being blocked, and skipping thousands of files
+                # quietly would hand back an archive with holes that look like
+                # data. Tell the two apart by how they arrive.
+                if consecutive >= BLOCKED_AFTER:
+                    raise SystemExit(
+                        f"cpc_outlook: {consecutive} consecutive files refused "
+                        f"(last {key}, HTTP {exc.status}). Scattered refusals are "
+                        f"normal for this archive, a run of them is not -- this "
+                        f"looks like being blocked rather than bad permissions. "
+                        f"Stopping with {len(records)} archived this run; re-run "
+                        f"later to resume.") from exc
                 continue
             raise
+        consecutive = 0
         category = client.EARLY_CATEGORY.get(suffix) if suffix else None
         leads = request.spec.params.get("leads", {}).get(product[:3])
         bundle = client.read(body, product=product, issued=issued, category=category,
@@ -106,6 +139,9 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
             publication_date=bundle.issued,
         ))
         pause()
+    if unavailable:
+        print(f"  {unavailable} file(s) listed but not served (403/404); "
+              f"the archive is incomplete by that many and says so here")
     return records
 
 

@@ -423,6 +423,19 @@ sources:
       silently corrupt the horizon comparison that is the reason both products
       are fetched.
 
+      AND SOME FILES THE LISTING OFFERS ARE NOT SERVED AT ALL. 403, not 404, and
+      per FILE rather than per date: verified 2022-10-31, where 610temp, 814temp
+      and 814prcp are all 403 while 610prcp the same day is 200 and the
+      neighbouring days are fine. These are skipped and counted. 403 is NOT in
+      pipeline.http.RETRY_STATUSES and must not be -- a permission fault does not
+      improve on the third attempt -- but it must not be fatal either, which it
+      was until a backfill died on it 9,231 files in.
+
+      A RUN of refusals is a different thing from scattered ones: it means this
+      project is being blocked, and quietly skipping thousands of files would
+      hand back an archive whose holes look like data. The ingest stops after 25
+      consecutive refusals and says which it thinks it is seeing.
+
       Geometry is lon/lat in NAD83 (the .prj says GCS_North_American_1983), so
       coordinates are already degrees and need no projection to test a point
       from config/geography.yaml. Reading the pair as (lat, lon) puts the corn

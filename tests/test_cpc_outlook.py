@@ -385,3 +385,86 @@ def test_cleaning_an_empty_outlook_gives_every_point_normal_odds(
     assert (table["anomaly"] == 0.0).all()
     assert (~table["covered"]).all()
     assert (table["category"] == "Normal").all()
+
+
+# --------------------------------------------------- files the server refuses
+
+
+def test_a_file_the_server_refuses_is_skipped_rather_than_fatal(
+        harness, cpc: Path, monkeypatch, capsys) -> None:
+    """403 and 404 both mean "listed but not served", and neither is fatal.
+
+    404 means it moved under us. 403 means its permissions are wrong upstream,
+    which happens per FILE and not per date: verified 2022-10-31, where
+    610temp, 814temp and 814prcp are all 403 while 610prcp the same day is 200
+    and the neighbouring days are fine. Raising on it stopped a backfill 9,231
+    files in.
+    """
+    from pipeline.http import FetchError
+
+    calls = {"n": 0}
+    good = body(cpc, "610temp_20230711.zip")
+
+    def flaky(spec, product, issued, *, suffix=""):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise FetchError("refused", url="https://example.test/x.zip", status=403)
+        return good, {}, "https://example.test/x.zip"
+
+    monkeypatch.setattr(client, "index", lambda spec: {
+        ("610temp", ""): [date(2023, 7, 10), date(2023, 7, 11)]})
+    monkeypatch.setattr(ingest_cpc.client, "download", flaky)
+    monkeypatch.setattr(ingest_cpc, "pause", lambda *a, **k: None)
+
+    records = ingest_cpc.fetch(harness.fetch("cpc_outlook", years=(2023,), months=(7,)))
+    out = capsys.readouterr().out
+    assert "HTTP 403, skipping" in out
+    assert "1 file(s) listed but not served" in out
+    # The run continued and archived the file it could get.
+    assert len(records) == 1
+
+
+def test_a_run_of_refusals_stops_rather_than_leaving_quiet_holes(
+        harness, monkeypatch) -> None:
+    """Scattered refusals are upstream; a RUN of them is being blocked.
+
+    Skipping thousands quietly would hand back an archive whose holes look like
+    data, so the two are told apart by how they arrive.
+    """
+    from pipeline.http import FetchError
+
+    def always_refused(spec, product, issued, *, suffix=""):
+        raise FetchError("refused", url="https://example.test/x.zip", status=403)
+
+    many = [date(2023, 7, day) for day in range(1, 29)]
+    monkeypatch.setattr(client, "index", lambda spec: {("610temp", ""): many})
+    monkeypatch.setattr(ingest_cpc.client, "download", always_refused)
+    monkeypatch.setattr(ingest_cpc, "pause", lambda *a, **k: None)
+
+    with pytest.raises(SystemExit, match="looks like being blocked"):
+        ingest_cpc.fetch(harness.fetch("cpc_outlook", years=(2023,), months=(7,)))
+
+
+def test_the_consecutive_counter_resets_on_a_success(harness, cpc: Path,
+                                                     monkeypatch) -> None:
+    """Otherwise scattered refusals across a long run would eventually trip the
+    blocked check and stop a healthy backfill."""
+    from pipeline.http import FetchError
+
+    good = body(cpc, "610temp_20230711.zip")
+    seen = {"n": 0}
+
+    def alternating(spec, product, issued, *, suffix=""):
+        seen["n"] += 1
+        if seen["n"] % 2:
+            raise FetchError("refused", url="https://example.test/x.zip", status=403)
+        return good, {}, "https://example.test/x.zip"
+
+    many = [date(2023, 7, day) for day in range(1, 29)]
+    monkeypatch.setattr(client, "index", lambda spec: {("610temp", ""): many})
+    monkeypatch.setattr(ingest_cpc.client, "download", alternating)
+    monkeypatch.setattr(ingest_cpc, "pause", lambda *a, **k: None)
+
+    # 14 refusals interleaved with 14 successes must not trip BLOCKED_AFTER.
+    records = ingest_cpc.fetch(harness.fetch("cpc_outlook", years=(2023,), months=(7,)))
+    assert len(records) == 14
