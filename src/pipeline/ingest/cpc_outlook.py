@@ -34,9 +34,12 @@ from ._common import pause, planned, resolve_years
 
 FIRST_YEAR = 2011
 DEFAULT_START_YEAR = 2011
-# Observed mean size of one issuance, for the plan's estimate (~110 KB unified,
-# ~9 KB early); only used to warn before a large pull.
-APPROX_BYTES = 110_000
+# Mean size of one issuance, for the plan's estimate. MEASURED over a complete
+# backfill, not sampled: an early guess of 110 KB from two files predicted
+# 1,317 MB for a pull that turned out to be 4.4 GB, because contour counts and
+# vertex density vary enormously with how active the forecast is. Only used to
+# warn before a large pull, but a warning off by 3.3x is not much of one.
+APPROX_BYTES = 360_000
 
 # Statuses that mean "the listing offers it but the server will not serve it".
 # 403 belongs here because this archive has per-file permission faults, not
