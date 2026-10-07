@@ -300,3 +300,57 @@ def test_cleaning_collapses_the_early_eras_two_files_into_one_row(
     # July 2012: the above-normal file is the one that said something.
     assert iowa["category"].iloc[0] == "Above"
     assert iowa["anomaly"].iloc[0] > 0
+
+
+# ------------------------------------------------------- the empty outlook
+
+
+def test_an_outlook_with_no_polygons_is_a_forecast_not_a_failure(cpc: Path) -> None:
+    """CPC draws no contours when it expects no significant departure anywhere.
+
+    814prcp for 2014-07-19 is 13 KB with zero records while 814temp the same day
+    has twelve. Raising on it stopped two backfill runs dead at that exact date,
+    1,999 files into 12,558, so this is the regression test for both.
+
+    The dbf's SCHEMA survives with no records, so the era is still readable; only
+    the dates are gone, because they live in the attributes.
+    """
+    raw = body(cpc, "814prcp_20140719.zip")
+    bundle = client.read(raw, product="814prcp", issued=date(2014, 7, 19), leads=(8, 14))
+    assert bundle.era == "unified"
+    assert bundle.contours == ()
+    # Dates reconstructed from the filename and the product's configured leads.
+    assert bundle.issued == date(2014, 7, 19)
+    assert bundle.lead_days == 8
+    assert (bundle.valid_end - bundle.issued).days == 14
+    # Every point is then at climatological odds, which is what no contour means.
+    assert client.best(bundle.contours, *IOWA) is None
+
+
+def test_an_empty_outlook_without_dates_or_leads_says_what_it_needs(cpc: Path) -> None:
+    """It cannot be guessed silently: with no attributes there is nothing to read."""
+    raw = body(cpc, "814prcp_20140719.zip")
+    with pytest.raises(client.OutlookError, match="needs `issued`"):
+        client.read(raw, product="814prcp")
+
+
+def test_the_ingest_check_accepts_an_empty_outlook(harness, cpc: Path, capsys) -> None:
+    request = harness.fetch("cpc_outlook")
+    bundle = client.read(body(cpc, "814prcp_20140719.zip"), product="814prcp",
+                         issued=date(2014, 7, 19), leads=(8, 14))
+    ingest_cpc._check(bundle, "814prcp", "", date(2014, 7, 19), request.spec)
+    assert "climatological odds" in capsys.readouterr().out
+
+
+def test_cleaning_an_empty_outlook_gives_every_point_normal_odds(
+        harness, cpc: Path) -> None:
+    harness.seed("cpc_outlook", "814prcp/2014-07-19", body(cpc, "814prcp_20140719.zip"),
+                 url="https://example.test/814prcp_20140719.zip",
+                 params={"product": "814prcp", "issued": "2014-07-19"},
+                 publication_date=date(2014, 7, 19))
+    clean_cpc.clean(harness.clean("cpc_outlook"))
+    table = harness.processed.read(clean_cpc.TABLE)
+    assert len(table) == 10, "five points x two crops, all uncovered"
+    assert (table["anomaly"] == 0.0).all()
+    assert (~table["covered"]).all()
+    assert (table["category"] == "Normal").all()

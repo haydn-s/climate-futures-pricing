@@ -85,7 +85,9 @@ def fetch(request: FetchRequest) -> list[RawRecord]:
                 continue
             raise
         category = client.EARLY_CATEGORY.get(suffix) if suffix else None
-        bundle = client.read(body, product=product, issued=issued, category=category)
+        leads = request.spec.params.get("leads", {}).get(product[:3])
+        bundle = client.read(body, product=product, issued=issued, category=category,
+                             leads=tuple(leads) if leads else None)
         _check(bundle, product, suffix, issued, request.spec)
         records.append(request.raw.save(
             request.spec.name, key, body,
@@ -148,8 +150,12 @@ def _check(bundle: client.Bundle, product: str, suffix: str, issued: date,
             raise ValueError(
                 f"{product}{suffix} {issued}: expected a lead of {low}-{high} days, "
                 f"found {actual_start}-{actual_end}")
+    # NOT an error: a file with no polygons is CPC forecasting no significant
+    # departure anywhere, and its dates were synthesised from the filename and
+    # the configured leads, which makes the check above tautological for it.
     if not bundle.contours:
-        raise ValueError(f"{product}{suffix} {issued}: no contours in the file")
+        print(f"  {product}{suffix}/{issued}: no contours -- climatological odds "
+              f"everywhere, recorded as a forecast")
 
 
 def _announce(plan: Iterable[tuple[str, str, date]], dry_run: bool) -> None:

@@ -128,14 +128,18 @@ def download(spec: SourceSpec, product: str, issued: date, *,
 
 
 def read(body: bytes, *, product: str, issued: date | None = None,
-         category: str | None = None) -> Bundle:
+         category: str | None = None,
+         leads: tuple[int, int] | None = None) -> Bundle:
     """Parse a zipped shapefile set into one Bundle, whichever era it is.
 
     `category` is required for the early era and ignored for the unified one,
-    where the file says so itself.
+    where the file says so itself. `leads` is needed only for an EMPTY outlook --
+    see below.
     """
     shapes, records, fields = _open(body)
     names = tuple(fields)
+    if not records:
+        return _read_empty(product, names, issued, leads)
     if "Prob" in names:
         return _read_unified(product, shapes, records, names)
     if "label" in names:
@@ -150,6 +154,38 @@ def read(body: bytes, *, product: str, issued: date | None = None,
 
 
 # ------------------------------------------------------------------- the readers
+
+
+def _read_empty(product: str, names: tuple[str, ...], issued: date | None,
+                leads: tuple[int, int] | None) -> Bundle:
+    """An outlook with no polygons at all, which is a FORECAST and not a failure.
+
+    When CPC expects no significant departure anywhere in the CONUS it draws no
+    contours, and the shapefile ships with zero records. Verified: 814prcp for
+    2014-07-19 is 13 KB with shapes=0 while 814temp the same day has twelve.
+
+    Treating this as corrupt is what stopped the first two backfill runs dead at
+    that exact date, 1,999 files into 12,558. Every point is then at
+    climatological odds -- which is what `best()` already returns for a point in
+    no contour -- so the only thing missing is the dates, because those live in
+    the attributes and there are no attributes. The issuance comes from the
+    filename and the valid period from the product's configured lead times.
+
+    The dbf's SCHEMA survives even with no records, so the era is still readable
+    from the field names.
+    """
+    era = "unified" if "Prob" in names else "early"
+    if issued is None or leads is None:
+        raise OutlookError(
+            f"{product}: the file holds no polygons, which is a valid forecast of "
+            f"climatological odds everywhere -- but its dates live in the attributes, "
+            f"so reading it needs `issued` from the filename and `leads` from config")
+    low, high = int(leads[0]), int(leads[1])
+    from datetime import timedelta
+    return Bundle(product=product, issued=issued,
+                  valid_start=issued + timedelta(days=low),
+                  valid_end=issued + timedelta(days=high),
+                  era=era, contours=())
 
 
 def _read_unified(product: str, shapes: list[Any], records: list[list[Any]],

@@ -58,9 +58,14 @@ def clean(request: CleanRequest) -> list[str]:
     for record, body in archived(request.raw, request.spec.name):
         product = str(record.params.get("product") or record.key.split("/")[0])
         category = record.params.get("category")
+        # `leads` matters only for an outlook with no polygons, whose dates cannot
+        # be read from attributes it does not have. Omitting it here made every
+        # empty forecast unreadable instead of climatological.
+        leads = request.spec.params.get("leads", {}).get(product[:3])
         try:
             bundle = client.read(body, product=product,
-                                 issued=_issued(record), category=category)
+                                 issued=_issued(record), category=category,
+                                 leads=tuple(leads) if leads else None)
         except client.OutlookError as exc:
             unreadable.append(f"{record.key}: {exc}")
             continue
