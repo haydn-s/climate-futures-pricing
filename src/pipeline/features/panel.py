@@ -74,7 +74,10 @@ DEFAULT_HORIZONS = (5, 10)
 # Publication lag of the nClimGrid monthly product, in days; see the module
 # docstring. Carried as a constant so the untradeable features can be labelled
 # without re-reading config.
-TRADEABLE_SOURCES = ("usdm", "nasa_power")
+TRADEABLE_SOURCES = ("usdm", "nasa_power", "cpc_outlook")
+
+# The CPC outlook products, as the cleaned table names them.
+FORECAST_PRODUCTS = ("610temp", "814temp", "610prcp", "814prcp")
 
 
 @dataclass(frozen=True)
@@ -194,6 +197,43 @@ def belt_drought(usdm: pd.DataFrame, states: tuple[str, ...] | None = None) -> p
         belt[f"d0_delta{lag}"] = belt["d0"].diff(lag)
     belt["publication_date"] = belt["publication_date"].cummax()
     return belt
+
+
+def belt_forecast(outlooks: pd.DataFrame, crop: str) -> pd.DataFrame:
+    """Belt-mean CPC outlook anomalies per issuance, wide by product, plus revisions.
+
+    THE ONLY TRADEABLE FEATURE BLOCK IN THIS PANEL. Every other source here
+    describes weather that has already happened and publishes late, which is why
+    peek_days exists at all. A forecast publishes BEFORE the weather it describes,
+    so its publication date is the date it could be acted on and peek 0 is a real
+    information set rather than a hobbled one.
+
+    LEVELS AND REVISIONS BOTH, because they are different claims. A level that has
+    sat at "60% above normal" for a week is public and old; the REVISION that put
+    it there was the news. Revisions also sidestep a problem the levels have: the
+    CPC temperature anomaly drifts upward across this record, averaging about
+    -1pp over 2012-2014 and +8pp over 2022-2026, because the probability is scored
+    against a climatological baseline that lags a warming record. A model given
+    raw levels would partly be learning "this is a later year"; a first difference
+    cannot.
+    """
+    rows = outlooks.loc[outlooks["crop"] == crop]
+    if rows.empty:
+        return pd.DataFrame(columns=["publication_date"])
+    belt = (rows.groupby(["issued", "product"], as_index=False)
+            .agg(anomaly=("anomaly", "mean"), points=("point", "nunique")))
+    wide = (belt.pivot(index="issued", columns="product", values="anomaly")
+            .sort_index())
+    wide.columns = [f"fc_{column}" for column in wide.columns]
+    # A revision is the change since that product was last issued, so each column
+    # differences on its own cadence rather than on the union of all four.
+    for column in list(wide.columns):
+        wide[f"{column}_rev"] = wide[column].diff()
+    wide = wide.reset_index().rename(columns={"issued": "publication_date"})
+    # Issuance IS publication for a forecast: lag 0, and exact rather than
+    # observed, because the date is in the filename and in the attributes.
+    wide["publication_date"] = pd.to_datetime(wide["publication_date"])
+    return wide
 
 
 def belt_counties(nclimgrid: pd.DataFrame, states: tuple[str, ...] | None = None) -> pd.DataFrame:
@@ -319,6 +359,14 @@ def build(processed: ProcessedStore, geography: Geography, *, crop: str = "corn"
     counties = (belt_counties(processed.read("nclimgrid_county_daily"), states)
                 if "nclimgrid_county_daily" in processed.names() else pd.DataFrame())
     attach(counties, ["cty_tmax_c", *[f"cty_heat_dd{w}" for w in HEAT_WINDOWS]], "nclimgrid")
+
+    # The forecast block. Tradeable at its publication date, unlike everything
+    # above it -- see belt_forecast.
+    outlooks = (belt_forecast(processed.read("cpc_outlook_point_daily"), crop)
+                if "cpc_outlook_point_daily" in processed.names() else pd.DataFrame())
+    forecast_columns = [f"fc_{product}{suffix}"
+                        for product in FORECAST_PRODUCTS for suffix in ("", "_rev")]
+    attach(outlooks, forecast_columns, "cpc_outlook")
 
     # Targets. Forward returns are the only thing here allowed to see the future.
     for series in price_series:

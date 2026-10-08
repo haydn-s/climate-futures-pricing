@@ -296,3 +296,87 @@ def test_the_sensitive_window_filter_keeps_only_the_growing_season(store, geogra
     window = geography.crop("corn").sensitive_months
     assert (window.start, window.end) == (4, 10)
     assert sorted(frame["month"].unique()) == list(range(4, 11))
+
+
+# ------------------------------------------------------- the forecast block
+
+
+def outlook_frame(issuances: dict[str, dict[str, float]], crop: str = "corn",
+                  points: tuple[str, ...] = ("Iowa", "Illinois")) -> pd.DataFrame:
+    """A cleaned cpc_outlook table: one row per point per product per issuance."""
+    rows = []
+    for issued, products in issuances.items():
+        for product, anomaly in products.items():
+            for point in points:
+                rows.append({
+                    "crop": crop, "point": point, "product": product,
+                    "issued": pd.Timestamp(issued),
+                    "valid_start": pd.Timestamp(issued) + pd.Timedelta(days=6),
+                    "valid_end": pd.Timestamp(issued) + pd.Timedelta(days=10),
+                    "anomaly": anomaly, "probability": 40.0, "category": "Above",
+                    "covered": True, "era": "unified",
+                    "publication_date": pd.Timestamp(issued),
+                })
+    return pd.DataFrame(rows)
+
+
+def test_a_forecast_publishes_before_the_weather_it_describes() -> None:
+    """The one source in this panel whose publication precedes its subject.
+
+    Every other block describes weather that already happened and publishes
+    late, which is what peek_days exists to measure. A forecast is actionable on
+    the day it is issued, so its publication date IS the issuance.
+    """
+    frame = outlook_frame({"2021-07-12": {"610temp": 20.0}})
+    timeline = panel.belt_forecast(frame, "corn")
+    assert len(timeline) == 1
+    row = timeline.iloc[0]
+    assert row["publication_date"] == pd.Timestamp("2021-07-12")
+    # And the window it describes is in the future relative to that.
+    assert frame["valid_start"].iloc[0] > row["publication_date"]
+
+
+def test_the_belt_forecast_averages_points_and_pivots_by_product() -> None:
+    frame = outlook_frame({"2021-07-12": {"610temp": 20.0, "814prcp": -5.0}})
+    frame.loc[(frame["point"] == "Iowa") & (frame["product"] == "610temp"),
+              "anomaly"] = 40.0
+    timeline = panel.belt_forecast(frame, "corn")
+    # Iowa 40 and Illinois 20 average to 30; the other product is its own column.
+    assert timeline["fc_610temp"].iloc[0] == pytest.approx(30.0)
+    assert timeline["fc_814prcp"].iloc[0] == pytest.approx(-5.0)
+
+
+def test_a_revision_differences_each_product_on_its_own_cadence() -> None:
+    """A level that has sat unchanged for a week is public and old; the revision
+    that put it there was the news. Revisions are also immune to the upward drift
+    in the CPC anomaly, which a raw level would partly encode as "a later year".
+    """
+    timeline = panel.belt_forecast(outlook_frame({
+        "2021-07-12": {"610temp": 10.0, "814temp": 5.0},
+        "2021-07-13": {"610temp": 40.0, "814temp": 5.0},
+        "2021-07-14": {"610temp": 40.0, "814temp": -5.0},
+    }), "corn")
+    assert np.isnan(timeline["fc_610temp_rev"].iloc[0]), "no prior issuance to revise"
+    assert timeline["fc_610temp_rev"].iloc[1] == pytest.approx(30.0)
+    assert timeline["fc_610temp_rev"].iloc[2] == pytest.approx(0.0), "unchanged is news of zero"
+    # Each product differences on its own, not on the union of all of them.
+    assert timeline["fc_814temp_rev"].iloc[1] == pytest.approx(0.0)
+    assert timeline["fc_814temp_rev"].iloc[2] == pytest.approx(-10.0)
+
+
+def test_an_empty_outlook_table_yields_an_empty_timeline() -> None:
+    empty = pd.DataFrame(columns=["crop", "point", "product", "issued", "anomaly"])
+    assert panel.belt_forecast(empty, "corn").empty
+    # And a crop with no forecasts of its own.
+    assert panel.belt_forecast(outlook_frame({"2021-07-12": {"610temp": 1.0}}),
+                               "cocoa").empty
+
+
+def test_the_forecast_block_counts_as_tradeable(store, geography) -> None:
+    """Unlike nClimGrid, whose month-long lag makes it untradeable by construction."""
+    assert "cpc_outlook" in panel.TRADEABLE_SOURCES
+    _, spec = panel.build(store, geography, crop="corn")
+    for name in spec.feature_sources:
+        if name.startswith("fc_"):
+            assert spec.feature_sources[name] == "cpc_outlook"
+            assert name in spec.tradeable_features
