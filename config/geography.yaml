@@ -1,0 +1,277 @@
+# Where each crop is grown and when weather matters to it.
+#
+# Corn comes first because it is the primary case; cocoa is here so the schema is
+# not quietly corn-shaped. A crop is described by any combination of states,
+# counties and points -- corn uses states now and counties later, cocoa uses
+# points -- plus the one window of the year when weather moves the crop.
+#
+# Schema, validated by src/pipeline/config.py::load_geography. Unknown keys are
+# rejected so a typo fails loudly instead of being silently ignored.
+#
+#   crops.<name>.label             required  human label for output.
+#   crops.<name>.sensitive_months  required  {start, end, label}. Months are
+#                                            1-12 inclusive of both ends. A window
+#                                            may wrap the new year (start > end)
+#                                            for crops whose season does.
+#   crops.<name>.countries         optional  entity names as the yield source
+#                                            spells them; used to join OWID rows.
+#   crops.<name>.states            optional  US states in scope. Each state
+#                                            carries three codes on purpose --
+#                                            see the warning below.
+#   crops.<name>.counties          optional  {fips, name, weight}. fips is the
+#                                            5-digit FEDERAL code and must be
+#                                            QUOTED or YAML eats the leading zero.
+#                                            weight is optional; when any county
+#                                            has one they all must, and weights
+#                                            are normalised at use.
+#   crops.<name>.points            optional  {name, country, lat, lon} anchors for
+#                                            gridded weather outside the US.
+#   crops.<name>.notes             optional  why these choices, and what is shaky.
+#
+# THREE CODES PER STATE, AND THEY ARE NOT INTERCHANGEABLE:
+#   postal  the two-letter abbreviation. USDM's county endpoint takes this, and it
+#           is the prefix nClimGrid writes into its region names ("IA: Polk County").
+#   fips    the 2-digit federal state code. Everything from USDA and Census keys
+#           on this; a 5-digit county FIPS starts with it.
+#   ncei    the 2-digit NCEI state code used in nClimGrid county identifiers, which
+#           are NOT FIPS codes. Iowa is NCEI 13 and FIPS 19, so nClimGrid calls
+#           Polk County 13153 while USDA calls it 19153. Mixing them does not
+#           error; it files Iowa's weather under Massachusetts, whose NCEI code is
+#           19. Convert through this table and nowhere else.
+version: 1
+
+crops:
+
+  corn:
+    label: "US corn (maize)"
+    countries: ["United States"]
+    sensitive_months:
+      start: 4
+      end: 10
+      label: "planting through harvest, April to October"
+    # The five largest corn-producing states the analysis already tracks. Codes
+    # verified against the nClimGrid county fixtures and the county FIPS quoted in
+    # the probe findings (IA 13153/19153, IL 11113/17113, IN 12007/18***,
+    # MN 21091/27***, NE 25041/31***).
+    states:
+      - {postal: IA, name: Iowa, fips: "19", ncei: "13"}
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: MN, name: Minnesota, fips: "27", ncei: "21"}
+      - {postal: NE, name: Nebraska, fips: "31", ncei: "25"}
+    # County FIPS with USDA production weights land here once nass_production has
+    # a key. Until then every state is weighted equally, which is what the current
+    # analysis does and says. Intended shape:
+    #   counties:
+    #     - {fips: "19153", name: "Polk County, IA", weight: 0.0123}
+    #     - {fips: "17113", name: "McLean County, IL", weight: 0.0201}
+    # fips is the FEDERAL code. Translate to an nClimGrid identifier through the
+    # state table above; do not paste an nClimGrid id in here.
+    counties: []
+    # The five representative points analysis/initial_analysis.py uses, one per
+    # state, carried into config so NASA POWER can serve corn at all: it is a
+    # point API, so an empty points list made this crop unreachable through the
+    # only source that is keyless, global, and 3-5 days behind rather than a
+    # month. These are NOT a substitute for the nClimGrid county averages -- one
+    # point stands in for an entire state, which is the equal-weighting
+    # limitation the README already names. They exist to reproduce the
+    # preliminary results through the pipeline and to cross-check the county
+    # aggregate against the series the previews were built on.
+    points:
+      - {name: Iowa, country: United States, lat: 42.0, lon: -93.6}
+      - {name: Illinois, country: United States, lat: 40.1, lon: -88.9}
+      - {name: Nebraska, country: United States, lat: 40.8, lon: -98.4}
+      - {name: Minnesota, country: United States, lat: 44.1, lon: -94.0}
+      - {name: Indiana, country: United States, lat: 40.3, lon: -86.5}
+    notes: |
+      A state-level scope is a deliberate simplification: corn output is
+      concentrated in a few hundred counties, so area-weighted state weather
+      understates the stress the market actually prices. County weights are the
+      planned refinement and the reason the counties key exists empty rather than
+      being left out.
+
+      April to October is wider than the window that matters most -- pollination
+      in July is what makes or breaks a US corn crop -- but the pipeline should
+      carry the whole season and let the analysis narrow it, not the reverse.
+
+  soybeans:
+    label: "US soybeans"
+    countries: ["United States"]
+    sensitive_months:
+      start: 6
+      end: 9
+      label: "pod set and fill, June to September"
+    # The SAME five states as corn, which is the point of this crop being here:
+    # IA, IL, IN, MN and NE are top-five producers of both, grown in rotation on
+    # the same ground. A corn-belt drought is therefore a soybean-belt drought
+    # too, so this crop adds no new events -- it adds an independent price series
+    # responding to the events corn already has, which is what the event study
+    # was short of.
+    states:
+      - {postal: IA, name: Iowa, fips: "19", ncei: "13"}
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: MN, name: Minnesota, fips: "27", ncei: "21"}
+      - {postal: NE, name: Nebraska, fips: "31", ncei: "25"}
+    counties: []
+    # The same five points as corn, for the same reason they are the same five
+    # states: soybeans are grown on this ground in rotation with corn. Point
+    # sources (NASA POWER, and the CPC outlook maps, which are read by
+    # point-in-polygon) cannot serve a crop that declares none.
+    points:
+      - {name: Iowa, country: United States, lat: 42.0, lon: -93.6}
+      - {name: Illinois, country: United States, lat: 40.1, lon: -88.9}
+      - {name: Nebraska, country: United States, lat: 40.8, lon: -98.4}
+      - {name: Minnesota, country: United States, lat: 44.1, lon: -94.0}
+      - {name: Indiana, country: United States, lat: 40.3, lon: -86.5}
+    notes: |
+      Shifted one month later than corn on purpose. Corn is made or broken at
+      pollination in July; soybeans set and fill pods through August, so August
+      is their critical month and the two crops read the same summer differently.
+      That offset is the test -- a drought that moves both identically is not
+      being priced through either crop's agronomy.
+
+  wheat:
+    label: "US soft red winter wheat"
+    countries: ["United States"]
+    sensitive_months:
+      start: 4
+      end: 6
+      label: "jointing through grain fill, April to June"
+    # THE CONTRACT DECIDES THE GEOGRAPHY, AND IT IS NOT KANSAS. The archived
+    # wheat series is ZW=F, the Chicago contract, which delivers SOFT RED WINTER
+    # wheat -- grown in the Ohio valley and the eastern Midwest. Kansas hard red
+    # winter is a different crop on a different contract (KE=F) and is not
+    # fetched. Using Kansas geography against a Chicago price would be measuring
+    # the weather of a crop that contract never delivers.
+    states:
+      - {postal: IL, name: Illinois, fips: "17", ncei: "11"}
+      - {postal: IN, name: Indiana, fips: "18", ncei: "12"}
+      - {postal: OH, name: Ohio, fips: "39", ncei: "33"}
+      - {postal: MO, name: Missouri, fips: "29", ncei: "23"}
+      - {postal: AR, name: Arkansas, fips: "05", ncei: "03"}
+    counties: []
+    # One representative point per state, and DELIBERATELY NOT corn's points for
+    # the two states they share. Soft red winter wheat is grown in the southern
+    # third of Illinois and the south-west of Indiana, not the central corn
+    # country -- Illinois here is near Mount Vernon at 38.5 against corn's 40.1,
+    # and Indiana near Vincennes at 38.7 against corn's 40.3. Reusing corn's
+    # points would have read the weather of the wrong half of both states.
+    #
+    # These are representative assumptions rather than probe findings, exactly as
+    # corn's and cocoa's are: a single point stands in for a state's wheat belt.
+    # They exist because the point sources -- NASA POWER, and the CPC outlook
+    # maps, which are read by point-in-polygon -- cannot serve a crop that
+    # declares none, which is why wheat was absent from the forecast table.
+    points:
+      - {name: Illinois, country: United States, lat: 38.5, lon: -89.0}
+      - {name: Indiana, country: United States, lat: 38.7, lon: -87.5}
+      - {name: Ohio, country: United States, lat: 41.0, lon: -83.7}
+      - {name: Missouri, country: United States, lat: 37.3, lon: -89.6}
+      - {name: Arkansas, country: United States, lat: 35.8, lon: -90.7}
+    notes: |
+      NCEI codes verified against the downloaded county files rather than
+      recalled: OH is NCEI 33 and FIPS 39, MO is 23 and 29, AR is 03 and 05.
+      IL and IN overlap the corn belt, which is why this crop shares two states
+      with corn and soybeans while the other three are its own.
+
+      THE SEASON IS THE FALSIFICATION TEST. Winter wheat is sown in autumn,
+      overwinters, fills grain in May and is harvested in June and July -- so by
+      the time a corn-belt drought peaks in late July, this crop is already in
+      the bin and its supply cannot be affected. If a July drought event moves
+      wheat as much as it moves corn, the move is not crop-supply news at all; it
+      is something common to agricultural futures, and that would be a caveat on
+      every price result in this project rather than a finding about wheat.
+
+      The April-to-June window is the agronomic one and is a working assumption,
+      not a probe finding. Verify against an agronomic source before treating a
+      wheat result as settled.
+
+  coffee:
+    label: "Arabica coffee"
+    countries: ["Brazil", "Colombia", "Honduras", "Guatemala", "Peru", "Ethiopia"]
+    sensitive_months:
+      start: 9
+      end: 2
+      label: "flowering through cherry development, September to February"
+    states: []
+    counties: []
+    # THE PRODUCERS ARE NOT A BLOC, which is the difference from cocoa. These are
+    # six countries on three continents with independent weather, so aggregating
+    # them DILUTES a signal rather than cancelling a recording artefact the way
+    # the contiguous West African cocoa bloc does. Brazil alone is 30% of world
+    # coffee and dominates arabica price formation, so it carries three points
+    # and the analysis is Brazil-centred with the bloc as a secondary check.
+    #
+    # AND THE HEMISPHERES CONFLICT. Brazil and Peru are southern -- flowering in
+    # September, harvest May to August, frost risk June to August. Colombia,
+    # Honduras, Guatemala and Ethiopia are northern, and Colombia has two
+    # harvests a year. One sensitive window cannot be right for both halves, so
+    # the window below is Brazil's and the analysis handles the rest separately.
+    # Treat any pooled northern-hemisphere result with suspicion.
+    points:
+      # Brazil: the three arabica regions that matter, south to north.
+      - {name: Sul de Minas, country: Brazil, lat: -21.5, lon: -45.4}
+      - {name: Cerrado Mineiro, country: Brazil, lat: -18.9, lon: -46.9}
+      - {name: Mogiana, country: Brazil, lat: -20.5, lon: -47.4}
+      - {name: Eje Cafetero, country: Colombia, lat: 5.0, lon: -75.6}
+      - {name: Santa Barbara, country: Honduras, lat: 15.0, lon: -88.6}
+      - {name: Huehuetenango, country: Guatemala, lat: 15.3, lon: -91.5}
+      - {name: Chanchamayo, country: Peru, lat: -11.1, lon: -75.3}
+      - {name: Jimma, country: Ethiopia, lat: 7.7, lon: 36.8}
+    notes: |
+      FROST IS THE POINT OF THIS CROP BEING HERE, and it is why NASA POWER now
+      carries T2M_MIN. A frost in the Brazilian winter damages the trees and so
+      the FOLLOWING season's crop, which makes it a lagged effect on a perennial
+      -- the same shape as cocoa's pod window but driven by cold rather than
+      disease. July 2021 is the clean case: tmin reached 4.44 C at a Minas Gerais
+      point on 2021-07-20 and KC=F rose from a June mean of 156 to 235 by
+      December, then averaged 214 through 2022.
+
+      Representative points, like every other crop here. Three for Brazil is
+      still coarse for a country growing 3.3 million tonnes across several
+      states, and the regional names are the agronomic districts rather than
+      administrative ones.
+
+      Ethiopia's yield series starts in 1993 rather than 1961, so it drops out of
+      any window reaching further back.
+
+  cocoa:
+    label: "West African cocoa"
+    countries: ["Cote d'Ivoire", "Ghana", "Nigeria", "Cameroon", "Togo"]
+    sensitive_months:
+      start: 6
+      end: 9
+      label: "main-crop pod development, June to September"
+    states: []
+    counties: []
+    # Growing areas in the two largest producers, as used by
+    # analysis/initial_analysis.py. Points, not polygons: a handful of
+    # representative locations stands in for the cocoa belt.
+    points:
+      - {name: Soubre, country: "Cote d'Ivoire", lat: 5.8, lon: -6.6}
+      - {name: Daloa, country: "Cote d'Ivoire", lat: 6.9, lon: -6.4}
+      - {name: Kumasi, country: Ghana, lat: 6.7, lon: -1.6}
+      - {name: Sunyani, country: Ghana, lat: 7.3, lon: -2.3}
+      # The rest of the West African bloc. Ondo State grows most of Nigeria's
+      # cocoa, Cameroon's sits in the Centre and South regions, and Togo's is in
+      # the south-west near Kpalime. Representative points, like the four above:
+      # one location stands in for a country's cocoa belt, and that is a coarser
+      # approximation for Nigeria and Cameroon than for the others because their
+      # growing areas are more dispersed.
+      - {name: Ondo, country: Nigeria, lat: 7.1, lon: 5.1}
+      - {name: Mbalmayo, country: Cameroon, lat: 3.5, lon: 11.5}
+      - {name: Kpalime, country: Togo, lat: 6.9, lon: 0.6}
+    notes: |
+      The contrast case: a tree crop damaged over months rather than over a week
+      of heat, so its weather signal should reach price more slowly. Cocoa has no
+      US county geography at all, which is the point of it being here -- an
+      ingest module that assumes states or FIPS codes will break on this crop.
+
+      The June-to-September window is the working assumption, not a finding: the
+      main crop is harvested from October and its pods fill over the preceding
+      rainy months, but the Harmattan dry season (December to February) also
+      damages pods, so a wrapping window may turn out to be the right shape (the
+      schema supports start > end for exactly that reason). The current analysis
+      sidesteps the question with a rolling six-month rainfall anomaly. Verify
+      against an agronomic source before treating this window as settled.

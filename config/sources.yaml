@@ -1,0 +1,512 @@
+# Every input this project ingests, one entry per source.
+#
+# Adding a source should not require touching Python: write a block here, then
+# drop a client in src/pipeline/clients/ and an ingest module in
+# src/pipeline/ingest/ named after the key you chose (the CLI dispatches on the
+# key: `python -m pipeline fetch --source nclimgrid` imports
+# pipeline.ingest.nclimgrid).
+#
+# Schema, validated by src/pipeline/config.py::load_sources. Unknown keys are
+# rejected so a typo fails loudly instead of being silently ignored.
+#
+#   kind                  required  payload format: "csv" or "json".
+#   url_template          required  str.format template. Placeholders are filled
+#                                   from `params` plus values passed at the call
+#                                   site: spec.format_url(year=2012, var="tmax").
+#                                   Pass ints for {year}/{month} -- some templates
+#                                   use a 02d format spec.
+#   params                required  default parameter values: query-string
+#                                   parameters, url_template placeholders, and the
+#                                   few constants a client needs to sanity-check a
+#                                   response. Must be JSON-serialisable, because
+#                                   they are written verbatim into
+#                                   data/manifest.jsonl -- quote dates, or YAML
+#                                   hands back a datetime.date object.
+#   publication_lag_days  required  whole days from the period a record describes
+#                                   to the date it becomes public, or null when the
+#                                   source has no fixed offset. null does not mean
+#                                   "there is no publication date"; it means the
+#                                   date must be read per record rather than
+#                                   computed (usually from the HTTP Last-Modified).
+#   notes                 required  why the source is here and what will bite you.
+#   accept                optional  Accept header. USDM below is the proof that
+#                                   getting this wrong changes the payload format
+#                                   without changing the status code.
+#   api_key_env           optional  environment variable holding the key. Keys are
+#                                   read from the environment, or from a .env file
+#                                   if one exists; they are never written here.
+#   api_key_signup_url    optional  where a human gets that key. Named verbatim in
+#                                   the error raised when the variable is unset.
+version: 1
+
+sources:
+
+  nclimgrid:
+    kind: csv
+    url_template: "https://www.ncei.noaa.gov/data/nclimgrid-daily/access/averages/{year}/{var}-{year}{month:02d}-cty-{status}.csv"
+    accept: null
+    params:
+      variables: [prcp, tmax, tmin, tavg]
+      region_type: cty
+      status: scaled
+      status_fallback: prelim
+      version_url_template: "https://www.ncei.noaa.gov/data/nclimgrid-daily/access/averages/{year}/ncdd-{year}{month:02d}-version.txt"
+      first_month: "1951-01"
+      expected_rows: 3107
+      expected_bytes: 1093490
+      day_columns: 31
+      missing_value: -999.99
+    publication_lag_days: 7
+    notes: |
+      NOAA NCEI nClimGrid-Daily v1.0.0 county area averages: daily prcp (mm) and
+      tmax/tmin/tavg (degrees C), 3,107 county rows per month-file, 1951-01 to the
+      current month. One file per variable per month; no header row.
+
+      THE IDENTIFIER IS NOT A FIPS CODE. Column 1 is a 2-digit *NCEI* state code
+      followed by the 3-digit FIPS county code. Iowa is NCEI 13, so Polk County is
+      13153; 19153 is absent from the file and 19*** is Massachusetts. Joining
+      these to USDA or Census county data as if they were FIPS does not error, it
+      files Iowa's weather under Massachusetts. Translate with the state table in
+      config/geography.yaml, or read the authoritative "ST: " prefix in the region
+      name. NCEI's own doc/us-state-codes_ncei-to-fips.csv has its state_name
+      column swapped for codes 11 and 12, so join on postal code, never on name.
+
+      Shape traps: always 37 columns (6 metadata + exactly 31 day slots) whatever
+      the month length, so never infer days from the column count; -999.99 is the
+      only missing marker and must become NaN before any mean or sum (an unmasked
+      July mean for Polk County lands near -0.3 instead of 34.18); no trailing
+      newline; parse column 1 as str or pandas destroys leading zeros.
+
+      Status is not cosmetic. The month in progress exists only as -cty-prelim.csv
+      (-cty-scaled.csv 404s), prelim is rebuilt daily and then deleted outright
+      once scaled exists, and prelim values are not scaled to the monthly product.
+      Try scaled, fall back to prelim, and record which one answered: a prelim
+      observation is unreproducible, so the bytes must be archived at read time
+      and never mixed into the same series as scaled values.
+
+      Publication: expect the scaled file on or after the 7th of the following
+      month (one observation: 2026-08 was finalised 2026-09-06) -- see
+      pipeline.calendar.nclimgrid_available_after. The per-month sidecar
+      ncdd-{YYYYMM}-version.txt is the authority on real coverage: for a prelim
+      month it says "through 2026-09-12" while the CSV still shows 31 columns. It
+      has two formats (pre-2017 bulk reprocessing has no "created on" line) and
+      carries the GHCN-Daily build id, which is the sharpest revision detector
+      available. Fetch it alongside the data file and store both. A historical
+      file's Last-Modified is the WAF release date (2022), not its data vintage
+      (GHCNd snapshot 2017) -- three distinct dates per file, do not conflate them.
+
+  nasa_power:
+    kind: json
+    url_template: "https://power.larc.nasa.gov/api/temporal/daily/point?parameters={parameters}&community={community}&latitude={latitude}&longitude={longitude}&start={start}&end={end}&format={format}"
+    accept: application/json
+    params:
+      # T2M_MIN was added for coffee and changes what every point carries. Coffee's
+      # defining weather event is a MINIMUM temperature one -- the July 2021 frost
+      # in Minas Gerais, after which KC=F roughly doubled -- and a heat-and-rain
+      # feature set cannot see it at all. Verified 2026-10-07 at a Minas Gerais
+      # point: tmin fell to 4.44 C on 2021-07-20 and 7.36 C the day before, which
+      # is the frost itself. It also matters for winter wheat, which overwinters.
+      # Changing this list changes the URL, so archived years must be re-fetched
+      # with --force; pipeline.clean.nasa_power says so when a mapped parameter is
+      # missing from an older file rather than filling it with nulls.
+      parameters: "T2M_MAX,T2M_MIN,PRECTOTCORR"
+      community: AG
+      format: JSON
+      variables:
+        tmax_c: T2M_MAX
+        tmin_c: T2M_MIN
+        precip_mm: PRECTOTCORR
+      date_format: "%Y%m%d"
+      fill_value: -999.0
+      first_date: "1981-01-01"
+      default_start_year: 2000
+      time_standard: LST
+      observed_latency_days: [3, 5]
+    publication_lag_days: 5
+    notes: |
+      NASA POWER daily point data: T2M_MAX (degrees C) and PRECTOTCORR (mm/day)
+      for ANY latitude and longitude, 1981-01-01 to about five days behind
+      present. Keyless. Reanalysis, not station observation -- MERRA-2 for the
+      older record and GEOS-IT for recent years.
+
+      This is the only source here that can serve a crop with no US county
+      geography, which is exactly what cocoa is: config/geography.yaml gives
+      cocoa four points and no states, and nClimGrid is US-county-only. It is
+      also what analysis/initial_analysis.py already uses for every crop,
+      including the five corn-belt points, so it is the source that reproduces
+      the existing preliminary results.
+
+      THE TAIL IS PADDED, NOT TRUNCATED. Ask for a range that runs past the
+      available record and the missing days come back as -999.0 rows rather
+      than being left out, and header.end is clamped to the SERVER'S TODAY, not
+      to the last real day -- so header.end overstates coverage by exactly the
+      latency and is not a vintage. The only authority on real coverage is the
+      last non-fill value. Verified 2026-09-27: end=20260930 returned
+      header.end=20260927 with real values only through 20260922, identically
+      for an Iowa point and a Cote d'Ivoire one, so the latency is global
+      rather than per-location. -999.0 (declared as header.fill_value) must
+      become NaN before any mean or sum; this is nClimGrid's -999.99 trap in a
+      different coat, and it bites hardest at the end of a series, where a
+      current-month mean silently collapses.
+
+      Dates are YYYYMMDD integers. A dashed ISO date is a 422, not a parse.
+
+      Errors are HTTP 422 in two incompatible shapes, and `header` CHANGES TYPE
+      between them: POWER's own validation returns {"header": "<prose>",
+      "messages": [...]} while the framework's query validation returns
+      {"detail": [{...}]}. On success `header` is an object, so
+      body["header"]["end"] against an error indexes a string and fails
+      somewhere far from the cause. Check the status and the shape, never the
+      key alone. A start before 1981-01-01 is one of these 422s and the message
+      names the real first date.
+
+      geometry.coordinates is [lon, lat, elevation] -- GeoJSON order, longitude
+      FIRST, with the requested point echoed back and elevation appended.
+      Reading it as (lat, lon) puts Soubre in the Atlantic. Because the request
+      is echoed, the response does not say which grid cell actually answered, so
+      it cannot tell you how far a value travelled to reach your point.
+
+      Publication: there is no Last-Modified, no ETag and no version document on
+      this endpoint, so no publication date can be read per record.
+      header.api.version and header.sources are the only vintage markers and
+      both move -- v2.9.7 in the response cached by the existing analysis
+      against v2.10.0 on 2026-09-27, and sources ["MERRA2","POWER"] for 1981
+      against ["GEOSIT","POWER"] for 2026, i.e. the reanalysis behind the series
+      changes with the era. Store both alongside the bytes.
+
+      publication_lag_days is 5 and is an OBSERVATION, NOT A SCHEDULE: the
+      2026-09-27 probe found values through 09-22, while the README's earlier
+      probe recorded about three days, hence observed_latency_days [3, 5]. Five
+      is the conservative end of that range. The choice is NOT neutral for this
+      project's argument -- assuming a longer lag makes prices look like they
+      lead the weather data, which is the effect under test -- so re-run the
+      timing test at three days as well and report both. null would have been
+      the more modest declaration, but pipeline.calendar.as_of DROPS rows whose
+      publication date is missing, which would make this source unusable for the
+      point-in-time work it exists for.
+
+      time_standard is LST (local solar time), not UTC, so a daily value is not
+      aligned to any market session: pair it with a price only through
+      pipeline.calendar.as_of. One request per point-year is the archiving unit,
+      so a reprocessed year shows up as a new version instead of being buried
+      inside a re-fetched 26-year blob.
+
+  usdm:
+    kind: json
+    url_template: "https://usdmdataservices.unl.edu/api/CountyStatistics/GetDroughtSeverityStatisticsByAreaPercent?aoi={aoi}&startdate={startdate}&enddate={enddate}&statisticsType={statistics_type}"
+    accept: application/json
+    params:
+      statistics_type: 1
+      date_format: "%Y-%m-%d"
+      severity_columns: [none, d0, d1, d2, d3, d4]
+      first_map_date: "2000-01-04"
+      map_weekday: tuesday
+      release_weekday: thursday
+      release_time_et: "08:30"
+    publication_lag_days: 2
+    notes: |
+      US Drought Monitor county statistics from the National Drought Mitigation
+      Center. Keyless. All six measures (none, d0..d4) are percent of county area
+      on a 0-100 scale. Record starts 2000-01-04.
+
+      statisticsType=1 is CUMULATIVE ("D2 or worse"): d0 >= d1 >= ... >= d4 and
+      none + d0 == 100 exactly, so the parts sum to 200 or 300 where categories
+      nest. statisticsType=2 is category-exclusive and sums to 100. The two agree
+      exactly (type1.dK == sum of type2.dJ for J >= K). Every row echoes its
+      setting as statisticFormatID, so keep that column through ingest. The
+      existing analysis uses type 1 and reads d2 as "severe drought or worse".
+
+      aoi takes state abbreviations and/or 5-digit county FIPS, comma-separated
+      and mixable. It does NOT take a numeric state FIPS on this county endpoint
+      (the StateStatistics endpoint is the one that requires it) -- and a rejected
+      aoi returns HTTP 200 with []. So does an out-of-range date window, and so
+      does an invalid statisticsType. An empty array can never be read as "no
+      drought"; assert an expected row count of counties x map dates instead.
+
+      The date window filters on the VALID WEEK overlapping [startdate, enddate],
+      not on mapDate: startdate=2012-07-01 returns the 2012-06-26 map as well.
+      Naive week counting over-reads by one row at the start. Send ISO dates --
+      the parser is US month-first and rejects D/M/YYYY with a 400. Accept:
+      application/json is effectively required: with */* the service returns CSV
+      with different date spellings, and application/xml is a 500. Errors come in
+      three incompatible shapes, one of which is a bare JSON string, so
+      `for row in json.loads(body)` iterates characters instead of failing.
+      Response order is county-major and newest-first; sort by (fips, mapDate).
+
+      Publication: NOTHING in the response is a publication date. mapDate equals
+      validStart, is always a Tuesday, and is the date the map describes; validEnd
+      is the following Monday 23:59. The map is released the Thursday after the
+      Tuesday cutoff at 08:30 ET, so publication_date = mapDate + 2 days and the
+      pipeline has to add it (pipeline.calendar.usdm_release_date). Evidence, in
+      tests/fixtures/usdm: a request made 2026-09-16 with enddate 9/30/2026
+      returns maps through 2026-09-08 and omits the 2026-09-15 map, which was
+      valid but not yet released. Caveat for the timing argument: the service
+      serves the CURRENT value for a past map date, so historical revisions are
+      invisible here and the series is not a true as-first-published vintage --
+      which is exactly why every fetch is archived.
+
+  yahoo_prices:
+    kind: json
+    url_template: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={period1}&period2={period2}&interval={interval}"
+    accept: application/json
+    params:
+      interval: 1d
+      # Null on purpose -- see the user-agent paragraph in the notes. The key is
+      # kept so restoring an override is a one-line config change.
+      user_agent: null
+      symbols:
+        corn: "ZC=F"
+        corn_fund: "CORN"
+        soybeans: "ZS=F"
+        wheat: "ZW=F"
+        cocoa: "CC=F"
+        coffee: "KC=F"
+        orange_juice: "OJ=F"
+    publication_lag_days: 0
+    notes: |
+      Daily closes for the continuous futures the analysis uses, plus the Teucrium
+      CORN fund as a roll-free robustness check. Keyless, undocumented, and not a
+      contract: treat availability as best-effort.
+
+      period1/period2 are epoch seconds and must both be given explicitly --
+      range=max silently returns monthly bars, which would quietly destroy the
+      daily timing test. Symbols contain "=" (ZC=F); url-quote them.
+
+      THE USER-AGENT STORY IS NOT WHAT IT LOOKED LIKE. This entry used to send
+      "Mozilla/5.0", on the belief that the endpoint rejects unfamiliar agents, as
+      analysis/initial_analysis.py still does. Probed on 2026-09-27 against three
+      windows nothing had cached (age: 0, distinct y-rid each time):
+
+        project agent  climate-futures-pricing/0.1 (academic research)  -> 200
+        Mozilla/5.0                                                     -> 200
+        NO User-Agent header at all                                     -> 429
+                                                                  "Edge: Too Many Requests"
+
+      So the gate is on the PRESENCE of a user agent, not on whether it resembles
+      a browser, and the honest project agent passes it. params.user_agent is
+      therefore null and this source sends the same agent as every other one; the
+      key is kept so an override is a one-line change if Yahoo ever starts gating
+      on the value. Note that 429 is retryable in pipeline.http, so a request with
+      no agent would burn three attempts and its backoff before failing -- which
+      cannot happen through the pipeline, because pipeline.http always sends one.
+
+      publication_lag_days is 0 because a daily close is public when the session
+      ends, but that is a same-day statement, not a same-instant one: pair a
+      close with a data release only through pipeline.calendar.as_of, and remember
+      the USDM 08:30 ET release time when a Thursday price is on the other side of
+      the comparison. Continuous futures also jump at contract rolls and Yahoo
+      back-adjusts history, so the series is not point-in-time; every fetch is
+      archived so a re-adjustment is visible as a new version rather than a
+      silent rewrite.
+
+  owid_yields:
+    kind: csv
+    url_template: "https://ourworldindata.org/grapher/{slug}.csv?v=1&csvType=full&useColumnShortNames=true"
+    accept: text/csv
+    params:
+      slugs:
+        corn: maize-yields
+        cocoa: cocoa-bean-yields
+        # Note the spelling: the yield grapher is "coffee-yields", not
+        # "coffee-bean-yields" -- that 404s -- while production IS
+        # "coffee-bean-production". The two measures are named inconsistently
+        # upstream, which is why each is configured rather than derived.
+        coffee: coffee-yields
+      # PRODUCTION, because an aggregate yield is not a mean of yields. A bloc's
+      # yield is total production over total area, so the area share of each
+      # country is the weight -- and area is only recoverable as production
+      # divided by yield. An unweighted mean would let Togo, which grows almost
+      # nothing, count as much as Cote d'Ivoire, which grows a third of the world.
+      production_slugs:
+        cocoa: cocoa-bean-production
+        coffee: coffee-bean-production
+      entities:
+        corn: ["United States"]
+        # The West African bloc, about 61% of world production in 2023. Widened
+        # from two countries because the two-country comparison turned out to be
+        # measuring cross-border transfers rather than weather: see
+        # analysis/cocoa_weather.py. Transfers between these five cancel inside
+        # their total, which is what makes the aggregate worth computing.
+        cocoa: ["Cote d'Ivoire", "Ghana", "Nigeria", "Cameroon", "Togo"]
+        # ARABICA producers, because the archived contract is KC=F, which ICE
+        # settles in washed arabica. Vietnam is 17.6% of world coffee and almost
+        # all of it is robusta on a different contract, so including it would be
+        # weighting a price by the weather of a crop it does not deliver.
+        coffee: ["Brazil", "Colombia", "Honduras", "Guatemala", "Peru", "Ethiopia"]
+    publication_lag_days: null
+    notes: |
+      Annual crop yields: FAOSTAT figures republished by Our World in Data, used
+      only to validate the weather index against realised yield shortfalls.
+      Keyless. Columns are entity, code, year, and one short-named value column
+      whose name varies by slug, so select it by exclusion rather than by name.
+      Entity spelling is not stable across datasets ("Cote d'Ivoire" appears with
+      and without diacritics), which is why the analysis matches on a prefix.
+
+      publication_lag_days is null on purpose: FAO revises history, an annual
+      figure can change years after the fact, and no per-row publication date is
+      served.
+
+      THERE IS NO USABLE PUBLICATION SIGNAL HERE AT ALL, which is a probe finding
+      rather than an assumption. The HTTP Last-Modified this entry once hoped to
+      use is a CDN artefact: on 2026-09-27 it read 14 seconds before the response
+      Date, alongside `age: 14` and `cf-cache-status: HIT` -- it records when the
+      edge cached the body, not when OWID republished anything, and it advances on
+      every cache miss. So pipeline.ingest.owid_yields stores it in params as
+      evidence and records publication_date as null, and pipeline.calendar.as_of
+      consequently drops every row of this table. That is the right outcome: this
+      source validates the weather index against realised harvests and was never
+      a point-in-time input. If a vintage is ever needed, look for a dataset
+      version document on the grapher rather than at the headers, and until one is
+      found the fetch date is the only honest vintage -- with the stored revision
+      history being what actually makes a restatement visible.
+
+  cpc_outlook:
+    kind: zip
+    url_template: "https://ftp.cpc.ncep.noaa.gov/GIS/us_tempprcpfcst/{product}{era}_{date}.zip"
+    accept: null
+    params:
+      products: [610temp, 814temp, 610prcp, 814prcp]
+      # Lead time in days from issuance to the start and end of the valid period.
+      leads:
+        "610": [6, 10]
+        "814": [8, 14]
+      date_format: "%Y%m%d"
+      # The archive is near-daily but not every day, so the directory listing is
+      # fetched once and the plan built from the filenames that actually exist.
+      # Guessing calendar dates instead means a 404 for every weekend and holiday.
+      index_url: "https://ftp.cpc.ncep.noaa.gov/GIS/us_tempprcpfcst/"
+      first_date: "2011-01-03"
+      unified_from: "2012-09-11"
+      early_until: "2012-10-09"
+      early_suffixes: [abv, bel]
+      categories: [Above, Below, Normal]
+      climatological_probability: 33.3333
+      expected_shapes: [1, 40]
+    publication_lag_days: 0
+    notes: |
+      CPC 6-10 day and 8-14 day temperature and precipitation outlooks, as
+      ESRI shapefiles in a zip, one issuance per file, near-daily from
+      2011-01-03 to the present (verified 2026-10-01: 4,920 unified issuances
+      of 610temp, archive listing reaches 2026-09-30). Keyless.
+
+      THIS IS THE ONLY SOURCE HERE THAT PUBLISHES BEFORE THE PERIOD IT
+      DESCRIBES. Every other entry in this file is late: the record exists and
+      the publication of it lags. A forecast inverts that -- Fcst_Date is the
+      day it was issued and Start_Date/End_Date are days 6-10 or 8-14 AFTER it.
+      pipeline.calendar.as_of still works unchanged and still means "what was
+      knowable then", but a forecast feature is tradeable at its publication
+      date rather than merely observable after it, which is the gap the peek
+      sweep in analysis/corn_peek_sweep.py could not close with late
+      observations. publication_lag_days is 0 for that reason and is exact, not
+      an estimate: the issuance date is in the filename and in the attributes.
+
+      THE SCHEMA CHANGED IN SEPTEMBER 2012 AND THE TWO ERAS OVERLAP.
+        unified  610temp_YYYYMMDD.zip      2012-09-11 onward, 4,920 files
+                 attributes Fcst_Date, Start_Date, End_Date (typed dates),
+                 Prob (float), Cat ("Above"/"Below"/"Normal")
+        early    610tempabv_YYYYMMDD.zip   2011-01-03 to 2012-10-09, 189 files
+                 and 610tempbel_. THE CATEGORY IS IN THE FILENAME, not in a
+                 field. Probability is the `label` attribute as a SPACE-PADDED
+                 STRING ("      33"), Fcst_Date is "MM/DD/YYYY" text, and the
+                 valid period is one combined "MM/DD/YYYY - MM/DD/YYYY" string
+                 in Valid_Per.
+      Reading only the unified pattern silently drops 189 issuances including
+      half of 2012, the year every result in this project turns on. Reading both
+      without excluding the 2012-09-11..2012-10-09 window counts that month
+      twice, once per era. Fetch the early era only before unified_from.
+
+      610temp_latest.zip IS A MOVING POINTER, NOT A VINTAGE. It is overwritten
+      in place, so archiving it records bytes that cannot be reproduced and
+      cannot be dated. Only fetch dated filenames; the listing also holds one
+      undated 610tempYYYYMMDD.zip with no separator, which is an anomaly rather
+      than a third era.
+
+      Polygons are NESTED PROBABILITY CONTOURS, not a partition: a point falls
+      inside one to three of them and the forecast for that point is the
+      innermost, i.e. the highest Prob among the polygons containing it. A point
+      inside none is covered by no contour, which means near-climatological odds
+      and NOT missing data. Verified 2026-10-01 against the five corn points:
+      the 2012-07-10 above-normal file put Iowa at 40% and Minnesota and
+      Indiana at 50%, the peak of that drought, while 2023-07-11 read "Normal"
+      36% across the belt with Nebraska at 40% above.
+
+      Cat has three values and the map shows only the LEADING tercile, so the
+      honest scalar is a signed anomaly against climatology: Above gives
+      +(Prob - 33.33), Below gives -(Prob - 33.33), Normal gives 0. A raw Prob
+      is not comparable across categories -- 60% Below is the opposite of 60%
+      Above, and averaging them reads as agreement.
+
+      TWO UPSTREAM ANOMALIES, both found by backfilling and neither a bug here.
+      An outlook can hold ZERO polygons: CPC draws no contours when it expects no
+      significant departure anywhere, so 814prcp for 2014-07-19 is 13 KB with no
+      records while 814temp that day has twelve. That is a forecast of
+      climatological odds everywhere, not a corrupt file -- but its dates live in
+      the attributes it does not have, so they come from the filename and these
+      lead times instead. And a file can carry the WRONG PRODUCT: on 2018-07-30
+      610prcp served the 8-14 day precipitation map (valid Aug 7-13) while
+      610temp that day was correctly 6-10 (Aug 5-9), and 610prcp was right on the
+      days either side.
+
+      Both used to raise, and each one stopped a backfill dead -- the empty file
+      at 1,999 of 12,558 and the mislabelled one at 5,444. Neither does now:
+      anomalies are recorded in the manifest params beside the archived bytes,
+      and pipeline.clean.cpc_outlook refuses to build a row from a file whose
+      lead contradicts its own filename. The archive keeps the evidence; the
+      table stays honest. Reading an 8-14 day forecast as a 6-10 day one would
+      silently corrupt the horizon comparison that is the reason both products
+      are fetched.
+
+      AND SOME FILES THE LISTING OFFERS ARE NOT SERVED AT ALL. 403, not 404, and
+      per FILE rather than per date: verified 2022-10-31, where 610temp, 814temp
+      and 814prcp are all 403 while 610prcp the same day is 200 and the
+      neighbouring days are fine. These are skipped and counted. 403 is NOT in
+      pipeline.http.RETRY_STATUSES and must not be -- a permission fault does not
+      improve on the third attempt -- but it must not be fatal either, which it
+      was until a backfill died on it 9,231 files in.
+
+      A RUN of refusals is a different thing from scattered ones: it means this
+      project is being blocked, and quietly skipping thousands of files would
+      hand back an archive whose holes look like data. The ingest stops after 25
+      consecutive refusals and says which it thinks it is seeing.
+
+      Geometry is lon/lat in NAD83 (the .prj says GCS_North_American_1983), so
+      coordinates are already degrees and need no projection to test a point
+      from config/geography.yaml. Reading the pair as (lat, lon) puts the corn
+      belt in the Indian Ocean and silently matches nothing.
+
+  nass_production:
+    kind: json
+    url_template: "https://quickstats.nass.usda.gov/api/api_GET/?key={key}&source_desc={source_desc}&sector_desc={sector_desc}&commodity_desc={commodity_desc}&statisticcat_desc={statisticcat_desc}&agg_level_desc={agg_level_desc}&state_alpha={state_alpha}&year={year}&format={format}"
+    accept: application/json
+    api_key_env: NASS_API_KEY
+    api_key_signup_url: "https://quickstats.nass.usda.gov/api"
+    params:
+      source_desc: SURVEY
+      sector_desc: CROPS
+      commodity_desc: CORN
+      statisticcat_desc: PRODUCTION
+      agg_level_desc: COUNTY
+      format: JSON
+    publication_lag_days: null
+    notes: |
+      USDA NASS Quick Stats: county corn production, wanted for the production
+      weights that config/geography.yaml is holding a place for. THIS SOURCE IS
+      NOT YET CONFIGURED -- it needs a free key in NASS_API_KEY, requested at
+      https://quickstats.nass.usda.gov/api, and every other source in this file
+      works without one. Nothing else depends on it, so the pipeline runs with it
+      unconfigured and fails only when this source is fetched.
+
+      The key travels in the query string, so a resolved URL is a secret. It is
+      never logged, never stored, and never committed: pipeline.http.redact_url
+      replaces key/api_key/token values before a URL reaches an error message or
+      data/manifest.jsonl, and the key itself lives in the environment or in an
+      untracked .env.
+
+      publication_lag_days is null because the lag is report-specific: in-season
+      Crop Production reports are monthly, the Annual Summary lands in January
+      after harvest, and a county figure can be revised afterwards. Do not invent
+      an offset -- record the release information the API returns per record, and
+      verify it against the NASS release calendar before this source is used for
+      anything point-in-time. Everything about this entry beyond the key
+      requirement is unverified by live probe; it is a starting point, not a
+      finding.
