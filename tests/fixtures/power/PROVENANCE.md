@@ -16,7 +16,20 @@ Request headers: `User-Agent: climate-futures-pricing/0.1 (academic research)`,
 
 ## Fetch date
 
-**Retrieved 2026-09-27, 02:10 UTC.** This matters more than usual for
+**The three `point_*` fixtures were re-captured 2026-10-09** when `T2M_MIN` was
+added to `params.parameters` for coffee: changing that list changes the URL, and
+`pipeline.clean.nasa_power` refuses a file that does not hold a mapped parameter
+rather than filling the column with nulls — so the old bytes could not be read
+any more. Same requests, one more parameter. The three `error_422_*` fixtures are
+unchanged and were retrieved 2026-09-27, 02:10 UTC.
+
+`point_iowa_current_padded_tail.json` now requests **2026-10-01 → 10-31** rather
+than September, because September had since filled in and a window inside the
+record shows no padding at all. `header.end` came back `20261008` — neither the
+requested end nor the last real day, which is `20261004`. The trap is identical
+and slightly sharper: four padded days instead of five.
+
+**Originally retrieved 2026-09-27, 02:10 UTC.** This matters more than usual for
 `point_iowa_current_padded_tail.json`, whose whole point is what the service does
 at the edge of its record — that file is only interpretable against the date it
 was fetched.

@@ -100,11 +100,21 @@ sources:
     url_template: "https://power.larc.nasa.gov/api/temporal/daily/point?parameters={parameters}&community={community}&latitude={latitude}&longitude={longitude}&start={start}&end={end}&format={format}"
     accept: application/json
     params:
-      parameters: "T2M_MAX,PRECTOTCORR"
+      # T2M_MIN was added for coffee and changes what every point carries. Coffee's
+      # defining weather event is a MINIMUM temperature one -- the July 2021 frost
+      # in Minas Gerais, after which KC=F roughly doubled -- and a heat-and-rain
+      # feature set cannot see it at all. Verified 2026-10-07 at a Minas Gerais
+      # point: tmin fell to 4.44 C on 2021-07-20 and 7.36 C the day before, which
+      # is the frost itself. It also matters for winter wheat, which overwinters.
+      # Changing this list changes the URL, so archived years must be re-fetched
+      # with --force; pipeline.clean.nasa_power says so when a mapped parameter is
+      # missing from an older file rather than filling it with nulls.
+      parameters: "T2M_MAX,T2M_MIN,PRECTOTCORR"
       community: AG
       format: JSON
       variables:
         tmax_c: T2M_MAX
+        tmin_c: T2M_MIN
         precip_mm: PRECTOTCORR
       date_format: "%Y%m%d"
       fill_value: -999.0
@@ -297,6 +307,11 @@ sources:
       slugs:
         corn: maize-yields
         cocoa: cocoa-bean-yields
+        # Note the spelling: the yield grapher is "coffee-yields", not
+        # "coffee-bean-yields" -- that 404s -- while production IS
+        # "coffee-bean-production". The two measures are named inconsistently
+        # upstream, which is why each is configured rather than derived.
+        coffee: coffee-yields
       # PRODUCTION, because an aggregate yield is not a mean of yields. A bloc's
       # yield is total production over total area, so the area share of each
       # country is the weight -- and area is only recoverable as production
@@ -304,6 +319,7 @@ sources:
       # nothing, count as much as Cote d'Ivoire, which grows a third of the world.
       production_slugs:
         cocoa: cocoa-bean-production
+        coffee: coffee-bean-production
       entities:
         corn: ["United States"]
         # The West African bloc, about 61% of world production in 2023. Widened
@@ -312,6 +328,11 @@ sources:
         # analysis/cocoa_weather.py. Transfers between these five cancel inside
         # their total, which is what makes the aggregate worth computing.
         cocoa: ["Cote d'Ivoire", "Ghana", "Nigeria", "Cameroon", "Togo"]
+        # ARABICA producers, because the archived contract is KC=F, which ICE
+        # settles in washed arabica. Vietnam is 17.6% of world coffee and almost
+        # all of it is robusta on a different contract, so including it would be
+        # weighting a price by the weather of a crop it does not deliver.
+        coffee: ["Brazil", "Colombia", "Honduras", "Guatemala", "Peru", "Ethiopia"]
     publication_lag_days: null
     notes: |
       Annual crop yields: FAOSTAT figures republished by Our World in Data, used

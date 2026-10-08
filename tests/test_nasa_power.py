@@ -76,7 +76,7 @@ def test_a_complete_month_parses_with_its_units_and_vintage(soubre) -> None:
     assert answer.last_observed == date(2012, 7, 31)
     assert answer.fill_value == -999.0
     assert answer.time_standard == "LST"  # local solar time, not UTC
-    assert answer.units == {"T2M_MAX": "C", "PRECTOTCORR": "mm/day"}
+    assert answer.units == {"T2M_MAX": "C", "T2M_MIN": "C", "PRECTOTCORR": "mm/day"}
     assert len(answer.series["T2M_MAX"]) == 31
     assert all(value is not None for value in answer.series["T2M_MAX"].values())
 
@@ -91,12 +91,15 @@ def test_the_coordinates_are_unpacked_longitude_first(soubre) -> None:
 
 def test_the_padded_tail_is_masked_and_coverage_stops_where_the_data_does(power: Path) -> None:
     answer = client.parse((power / "point_iowa_current_padded_tail.json").read_bytes(), url="fixture")
-    # Requested through 2026-09-30; header.end is the server's today, not the data's.
-    assert answer.header_end == "20260927"
-    assert len(answer.series["T2M_MAX"]) == 27
-    assert answer.last_observed == date(2026, 9, 22), "five days of padding"
+    # Requested through 2026-10-31; header.end is the server's today, not the
+    # requested end and not the data's end -- it overstates coverage by the
+    # latency, which is the whole trap. Re-captured when T2M_MIN was added to the
+    # parameter list, so the window moved; the shape of the trap did not.
+    assert answer.header_end == "20261008"
+    assert len(answer.series["T2M_MAX"]) == 8
+    assert answer.last_observed == date(2026, 10, 4), "four days of padding"
     filled = [day for day, value in answer.series["T2M_MAX"].items() if value is None]
-    assert filled == [date(2026, 9, d) for d in range(23, 28)]
+    assert filled == [date(2026, 10, d) for d in range(5, 9)]
     # The sentinel is gone, so nothing downstream can average it by accident.
     assert -999.0 not in set(answer.series["T2M_MAX"].values())
 
@@ -191,17 +194,17 @@ def test_the_publication_date_is_the_last_real_day_plus_the_configured_lag(
     assert ingest_power._published(request, complete) == date(2012, 8, 5)
 
     padded = client.parse((power / "point_iowa_current_padded_tail.json").read_bytes())
-    # Last real day is 09-22, NOT header.end of 09-27.
-    assert ingest_power._published(request, padded) == date(2026, 9, 27)
+    # Last real day is 10-04, NOT header.end of 10-08.
+    assert ingest_power._published(request, padded) == date(2026, 10, 9)
 
 
 def test_a_year_is_complete_only_when_real_values_reach_its_last_day(harness, power: Path) -> None:
     crop = harness.geography.crop("cocoa")
     point = crop.points[0]
     padded = client.parse((power / "point_iowa_current_padded_tail.json").read_bytes())
-    params = ingest_power._params(crop, point, padded, date(2026, 1, 1), date(2026, 9, 30))
+    params = ingest_power._params(crop, point, padded, date(2026, 1, 1), date(2026, 12, 31))
     assert params["complete"] is False
-    assert params["last_observed"] == "2026-09-22"
+    assert params["last_observed"] == "2026-10-04"
     # The readable name travels in params; the key carries the slug.
     assert params["point"] == "Soubre" and params["country"] == "Cote d'Ivoire"
 
@@ -241,7 +244,7 @@ def test_clean_builds_a_point_day_table_with_units_in_the_names(harness, power: 
     table = harness.processed.read(clean_power.TABLE)
 
     assert len(table) == 31
-    assert {"tmax_c", "precip_mm"} <= set(table.columns)
+    assert {"tmax_c", "tmin_c", "precip_mm"} <= set(table.columns)
     assert (table["lat"] == 5.8).all() and (table["lon"] == -6.6).all()
     assert table["source_model"].iloc[0] == "MERRA2+POWER"
 
@@ -259,19 +262,19 @@ def test_clean_drops_the_padded_tail_rather_than_keeping_future_dated_rows(harne
     seed(harness, power, "point_iowa_current_padded_tail.json", "cocoa/soubre/2026")
     clean_power.clean(harness.clean("nasa_power"))
     table = harness.processed.read(clean_power.TABLE)
-    assert table["date"].max().date() == date(2026, 9, 22)
-    assert len(table) == 22
+    assert table["date"].max().date() == date(2026, 10, 4)
+    assert len(table) == 4
     # No row may carry a publication date for a day that holds no observation.
-    assert not table[["tmax_c", "precip_mm"]].isna().all(axis=1).any()
+    assert not table[["tmax_c", "tmin_c", "precip_mm"]].isna().all(axis=1).any()
 
 
 def test_as_of_hides_what_had_not_been_published(harness, power: Path) -> None:
     seed(harness, power, "point_iowa_current_padded_tail.json", "cocoa/soubre/2026")
     clean_power.clean(harness.clean("nasa_power"))
     table = harness.processed.read(clean_power.TABLE)
-    # On 2026-09-20, the 5-day lag means nothing after 09-15 was knowable.
-    visible = as_of(table, PUBLICATION_COLUMN, "2026-09-20")
-    assert visible["date"].max().date() == date(2026, 9, 15)
+    # On 2026-10-08, the 5-day lag means nothing after 10-03 was knowable.
+    visible = as_of(table, PUBLICATION_COLUMN, "2026-10-08")
+    assert visible["date"].max().date() == date(2026, 10, 3)
 
 
 def test_clean_names_the_variable_it_could_not_find(harness, power: Path) -> None:
