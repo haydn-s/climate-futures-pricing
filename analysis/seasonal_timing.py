@@ -4,12 +4,12 @@ Run from the repository root, after fetch and clean:
 
     PYTHONPATH=src python analysis/seasonal_timing.py
 
-cross_crop_events.py found corn's timing flipping with the season: a midsummer
-corn-belt drought is priced BEFORE the Drought Monitor publishes it, a spring one
-after. The obvious mechanism is attention -- during the weeks that decide a crop,
-everyone is already watching the weather, so the official figure arrives last and
-confirms what the price has done. Outside those weeks the figure, or the drought
-carrying on, does the work.
+cross_crop_events.py found corn's average return timing flipping with the season:
+a midsummer corn-belt drought has more return BEFORE the Drought Monitor publishes
+it, while a spring event has more after. One candidate mechanism is attention --
+during the weeks that decide a crop, traders may already be watching the weather,
+so the official figure arrives after part of the move. Outside those weeks the
+publication, continuing weather, or another common driver may dominate.
 
 That story makes a prediction sharp enough to be wrong. If this is attention to a
 VULNERABLE CROP, each crop should be priced early during ITS OWN critical weeks,
@@ -41,7 +41,8 @@ deliberately the whole season (corn is 4-10), which is the right scope for a
 pipeline and far too wide to locate a two-month effect. If this survives, they
 belong in config.
 
-Cells run to three to seven events. This is the shape of an answer.
+Cells run to three to seven events. The pattern is a hypothesis-generating
+seasonal diagnostic, not a precise effect estimate or a causal test.
 """
 
 from __future__ import annotations

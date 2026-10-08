@@ -36,9 +36,10 @@ rather than assumed away.
 4. SEARCHING WINDOWS ON 24 OBSERVATIONS WILL FIND SOMETHING. Four windows times
    seven measures times two alignments is 56 tests; at p<0.05 about three will
    look significant from noise alone. So the whole matrix is printed rather than
-   the best cell, the test count is stated, and anything promising is re-scored
-   leave-one-year-out -- which is the only number here that cannot be produced
-   by searching.
+   the best cell and the test count is stated. Promising specifications are also
+   scored leave-one-year-out, but that protects only the fitted coefficients:
+   because the window and measures were selected on the full sample, those
+   scores remain exploratory rather than clean out-of-sample validation.
 
 Heat is thresholded at 32 C rather than corn's 29 C: cocoa is a shade tree crop
 with a lower optimum and a different stress point. That figure is an agronomic
@@ -63,6 +64,7 @@ from pipeline.features.annual import detrend_pct  # noqa: E402
 from pipeline.storage import ProcessedStore, default_data_root  # noqa: E402
 
 CROP = "cocoa"
+PRIMARY_PRODUCERS = ("Cote d'Ivoire", "Ghana")
 HEAT_THRESHOLD_C = 32.0        # assumption, see the docstring
 DRY_DAY_MM = 1.0               # a day with less than this is dry
 WET_DAY_MM = 20.0              # a day above this favours black pod
@@ -84,6 +86,8 @@ def correlate(x: pd.Series, y: pd.Series) -> tuple[float, int, float]:
     pair = pd.concat([x, y], axis=1).dropna()
     if len(pair) < 8:
         return float("nan"), len(pair), float("nan")
+    if pair.iloc[:, 0].nunique() < 2 or pair.iloc[:, 1].nunique() < 2:
+        return float("nan"), len(pair), float("nan")
     r = float(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
     t = r * math.sqrt((len(pair) - 2) / max(1e-12, 1 - r * r))
     return r, len(pair), math.erfc(abs(t) / math.sqrt(2))
@@ -96,7 +100,7 @@ def stars(p: float) -> str:
 
 
 def belt_daily(power: pd.DataFrame) -> pd.DataFrame:
-    """Equal-weighted daily weather across the four cocoa points."""
+    """Equal-weighted daily weather across the configured cocoa points."""
     rows = power.loc[power["crop"] == CROP]
     if rows.empty:
         raise SystemExit("no cocoa weather in nasa_power_point_daily; fetch and clean it")
@@ -104,6 +108,25 @@ def belt_daily(power: pd.DataFrame) -> pd.DataFrame:
             .agg(tmax_c=("tmax_c", "mean"), precip_mm=("precip_mm", "mean"),
                  points=("point", "nunique"))
             .sort_values("date", ignore_index=True))
+
+
+def paired_shortfalls(
+    shortfalls: dict[str, pd.Series],
+    entities: tuple[str, str] = PRIMARY_PRODUCERS,
+) -> tuple[pd.DataFrame, float]:
+    """Align the named producers and return their correlation.
+
+    Name-based selection is deliberate. Cocoa now includes five countries, so
+    positional selection silently changed this diagnostic to Cameroon versus
+    Cote d'Ivoire while the report continued to label it Cote d'Ivoire versus
+    Ghana.
+    """
+    missing = [entity for entity in entities if entity not in shortfalls]
+    if missing:
+        raise ValueError(f"missing cocoa shortfall series: {', '.join(missing)}")
+    pair = pd.concat([shortfalls[entity].rename(entity) for entity in entities],
+                     axis=1).dropna()
+    return pair, float(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
 
 
 def window_features(daily: pd.DataFrame, months: list[tuple[int, int]],
@@ -231,32 +254,35 @@ def main() -> None:
     belt_shortfall = pd.concat(shortfalls.values(), axis=1).mean(axis=1)
     span = belt_shortfall.dropna()
 
-    # THE TARGET IS COMPROMISED, AND THIS IS THE HEADLINE. Two adjacent countries
-    # growing the same crop in the same climate zone should have POSITIVELY
-    # correlated yield shortfalls -- they share weather systems. These are
-    # negatively correlated, and their bad years do not overlap at all.
-    pair = pd.concat(shortfalls.values(), axis=1).dropna()
-    inter = float(pair.iloc[:, 0].corr(pair.iloc[:, 1]))
+    # THE COUNTRY TARGETS ARE COMPROMISED, AND THIS IS THE HEADLINE. The two
+    # largest adjacent producers should generally share the sign of major
+    # weather shocks. They are selected by name, not position, because the
+    # configured bloc now contains five countries.
+    pair, inter = paired_shortfalls(shortfalls)
+    members = pd.concat(shortfalls.values(), axis=1)
     print(f"\n{'=' * 72}")
     print("BEFORE ANY WEATHER: is the yield record usable as a target?")
-    print(f"  Cote d'Ivoire vs Ghana shortfall correlation: r = {inter:+.3f} "
+    print(f"  {PRIMARY_PRODUCERS[0]} vs {PRIMARY_PRODUCERS[1]} shortfall "
+          f"correlation: r = {inter:+.3f} "
           f"(n={len(pair)})")
     for entity, series in shortfalls.items():
         worst = series.dropna().nsmallest(3)
         print(f"    {entity:14s} sd {series.std():.3f}  worst: "
               + ", ".join(f"{int(y)} {v:+.0%}" for y, v in worst.items()))
-    print(f"    mean of the two   sd {belt_shortfall.std():.3f}  "
-          f"<- averaging destroys {1 - belt_shortfall.std() / pair.std().mean():.0%} "
+    print(f"    mean of members   sd {belt_shortfall.std():.3f}  "
+          f"<- averaging destroys {1 - belt_shortfall.std() / members.std().mean():.0%} "
           f"of the variance")
     if inter < 0:
-        print("\n  A NEGATIVE correlation between neighbours cannot come from weather.")
+        print("\n  A STRONGLY NEGATIVE correlation between neighbours is difficult to")
+        print("  reconcile with shared regional weather as the dominant driver.")
         print("  Cocoa in both countries is bought at a state-fixed farmgate price, and")
-        print("  when those prices diverge beans are smuggled across the border -- which")
-        print("  inflates one country's recorded production and deflates the other's.")
-        print("  So these series carry a trade artefact, and a weather index cannot be")
-        print("  validated against them the way corn's was against US yields. Every")
-        print("  correlation below inherits that caveat; the belt mean is reported for")
-        print("  continuity with the previews but is the worst of the three targets.")
+        print("  cross-border bean movements when those prices diverge are one plausible")
+        print("  mechanism that would inflate one country's recorded production and")
+        print("  deflate the other's.")
+        print("  These series may therefore carry a trade artefact, so a weather index")
+        print("  cannot be validated against them the way corn's was against US yields.")
+        print("  Every correlation below inherits that caveat; the country mean remains")
+        print("  for continuity with the previews but is not a clean validation target.")
     shortfalls_members = list(shortfalls.values())
     shortfalls["belt (mean)"] = belt_shortfall
     print(f"yields:  {', '.join(sorted(in_window['entity'].unique()))}, "
@@ -444,8 +470,8 @@ def main() -> None:
             print(f"  {name:20s} {measure:15s} " + " ".join(cells))
 
     print("\n" + "-" * 72)
-    print("Reading this: a 5x price move with unexceptional weather percentiles means")
-    print("free climate data cannot explain this shock -- which is a finding about")
+    print("Reading this: a multi-fold price move with unexceptional weather percentiles")
+    print("means free climate data cannot explain this shock -- which is a finding about")
     print("WHICH commodities this approach serves, not a failure to measure. Cocoa's")
     print("binding constraints are disease, tree age and farmgate pricing, none of")
     print("which is in any weather archive.")

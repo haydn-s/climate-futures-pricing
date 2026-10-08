@@ -200,9 +200,9 @@ def main() -> None:
 
     print("\n" + "-" * 70)
     print("Reading this: a positive out-of-sample R-squared means free weather data")
-    print("predicts a harvest shortfall it was never shown -- research question one")
-    print("answered in the affirmative. Compare the two measurements to see whether")
-    print("473 county averages buy anything over five representative points.")
+    print("predicts a harvest shortfall it was never shown -- evidence supporting an")
+    print("affirmative answer to research question one. Compare the measurements to see")
+    print("whether 473 county averages buy anything over five representative points.")
 
 
 if __name__ == "__main__":

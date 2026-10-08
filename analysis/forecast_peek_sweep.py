@@ -7,17 +7,18 @@ Run from the repository root, after fetch and clean:
 THIS IS THE ONE PEEK 0 THAT MEANS SOMETHING. corn_peek_sweep.py scored published
 OBSERVATIONS and found nothing at any information set: -0.016 daily, -0.013
 weekly, and no skill even when the model was allowed to see data published three
-weeks late. That closed off "the data arrives too late" as the explanation, but
-it could not test the obvious remaining channel, because an observation is late
-by construction. A forecast is not. CPC issues its 6-10 and 8-14 day outlooks
+weeks late. That made "the data arrives too late" insufficient to explain the
+null in those models, but it could not test the obvious remaining channel,
+because an observation is late by construction. A forecast is not. CPC issues
+its 6-10 and 8-14 day outlooks
 before the weather happens, so peek 0 here is a complete, actionable information
 set rather than a hobbled one.
 
 WHAT IS BEING ASKED, precisely: holding only what a trader could have read that
-morning, does the published forecast predict the next few days of corn? If the
-answer is no, the market's efficiency with respect to public weather information
-is established on the channel that actually matters, and the project's headline
-null is as strong as it can be made. If the answer is yes, everything earlier
+morning, does the published forecast predict the next few days of corn? A null
+would strengthen the evidence for efficiency with respect to these public
+products, horizons, and model classes; it cannot establish efficiency for every
+weather signal or trading strategy. If the answer is yes, everything earlier
 changes.
 
 FOUR THINGS THIS DOES DIFFERENTLY from the observational sweep.
@@ -155,12 +156,12 @@ def main() -> None:
     print("\nA negative figure means the published forecast does not predict corn at")
     print("any horizon or feature set tested -- measured against the training mean,")
     print("which is the only baseline a forecaster actually has. Combined with the")
-    print("observational sweep, that closes both public channels: neither the weather")
-    print("that has happened nor the forecast of the weather to come carries an")
-    print("exploitable signal, and the latency explanation is gone because a forecast")
-    print("has no latency. What remains unexplained is the +7.76% corn earns in the")
-    print("fortnight before a drought publication during pollination -- which is not")
-    print("a public-information story, since neither public source predicts it.")
+    print("observational sweep, these models find no exploitable signal in either")
+    print("public channel tested: weather that has happened or CPC forecasts of the")
+    print("weather to come. Forecasts have no observational publication lag, so latency")
+    print("is not sufficient to explain this null. The descriptive +7.76% corn return")
+    print("before pollination-window drought publications remains unexplained by these")
+    print("features; it is not, by itself, evidence of private information or causality.")
 
 
 if __name__ == "__main__":
