@@ -39,6 +39,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
+| Can market-neutral targets and nonlinear models turn the null into a signal? | One primary and one marginal configuration clear the paper-trading gate; neither is ready for live capital. | Nested walk-forward selection, a fixed 2024–2026 holdout, and per-leg costs. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
@@ -104,7 +105,43 @@ PYTHONPATH=src python analysis/forecast_verification.py
 PYTHONPATH=src python analysis/forecast_peek_sweep.py
 ```
 
-### 4. Event timing is real but not cleanly attributable
+### 4. Market-neutral modeling produces a paper-trading candidate
+
+The signal benchmark tests three five-day targets: raw corn returns, corn minus
+wheat, and corn minus a trailing-beta soybean/wheat basket. It crosses those with
+three feature sets—crop-stage weather, added price regimes, and added CPC
+forecasts—and Ridge, logistic, and shallow gradient-boosting models.
+
+Hyperparameters and buy/sell/hold thresholds are selected inside each expanding
+training block. Outer folds move forward with an embargo, 2024–2026 remains a
+fixed final holdout, and every trade pays five basis points per leg. Market
+features exclude the close used to enter the target return; CPC inputs are
+delayed one session because the archive records release dates but not times, and
+forecast-enhanced specifications begin when CPC coverage starts in 2012.
+
+Two of the 27 configurations pass the explicit paper-trading gate. The primary
+candidate is shallow boosting on the corn-minus-wheat target with the full public
+feature set. After ten basis points per two-leg trade, it records development
+Sharpe 0.81 across four positive forward folds, a 24.2% maximum development
+drawdown, and holdout Sharpe 0.88 with a 9.1% drawdown. It improves materially on
+the best raw-return strategy's risk-adjusted results even though their absolute
+holdout returns are almost equal (11.3% versus 11.5%). A beta-adjusted spread
+with Ridge also passes, but its 1.0% holdout return and 0.14 Sharpe make it a
+marginal result rather than the preferred candidate.
+
+Every regression model still has negative out-of-sample R², and the final
+holdout has now been reviewed. The supported deliverable is therefore a
+**candidate for prospective paper trading**, not evidence sufficient for live
+capital.
+
+Detailed assumptions and every comparison are in
+[`analysis/ml_signal_baseline_report.md`](analysis/ml_signal_baseline_report.md);
+machine-readable results are in
+[`analysis/ml_signal_baseline_results.csv`](analysis/ml_signal_baseline_results.csv).
+
+Run: `PYTHONPATH=src python analysis/ml_signal_baseline.py`
+
+### 5. Event timing is real but not cleanly attributable
 
 The top drought jumps tell a more complicated story than the preliminary
 lead-lag correlations did. Among 12 severe events with complete price windows,
@@ -133,7 +170,7 @@ PYTHONPATH=src python analysis/cross_crop_events.py
 PYTHONPATH=src python analysis/seasonal_timing.py
 ```
 
-### 5. Cocoa and coffee expose target-data limitations
+### 6. Cocoa and coffee expose target-data limitations
 
 For cocoa, Côte d'Ivoire and Ghana's detrended yield shortfalls correlate at
 −0.59 even though the countries are adjacent and share weather systems. A
@@ -178,6 +215,11 @@ The analyses are deliberately not treated as equally conclusive.
 4. **Exploratory evidence:** seasonal stages, cocoa windows, thresholds, and
    tree-crop measures involve specification search. Their full matrices and test
    counts are reported; isolated p-values are not treated as confirmation.
+
+The ML signal benchmark adds a stricter decision layer: model and threshold
+selection are nested within each training period, costs scale with the number of
+traded legs, and a candidate must perform across forward folds and the fixed
+holdout before it can be considered for paper trading.
 
 Important remaining threats:
 
@@ -294,7 +336,7 @@ probing a source.
 ```text
 config/                  source definitions and crop geography
 src/pipeline/            clients, ingestion, cleaning, storage, features, tests
-analysis/                research scripts; each prints its assumptions and result
+analysis/                research scripts and generated comparison reports
 tests/                   offline unit tests and captured-response fixtures
 tests/fixtures/*/        fixture provenance and upstream traps
 presentation/            proposal deck and its generator
@@ -307,11 +349,14 @@ reproduce.py             resumable end-to-end workflow
 - [x] County and point weather, drought, price, yield, and CPC forecast features
 - [x] Corn yield validation with honest trend fitting
 - [x] Daily and weekly forward return backtests
+- [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
 - [ ] USDA report-day and explicit contract-roll controls
+- [x] A cost-aware market-neutral candidate that clears the paper-trading gate
+- [ ] Prospective paper-trading validation on data not used in this study
 - [ ] Frozen, distributable raw-data snapshot for byte-identical reproduction
 - [ ] Agribusiness equities and NOAA Storm Events extension
 
