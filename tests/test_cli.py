@@ -96,6 +96,16 @@ def test_the_defaults_point_at_the_shipped_config() -> None:
     assert args.data_root is None  # resolved to the repository's data/ later
 
 
+def test_signal_command_parses_as_of_and_never_implies_execution() -> None:
+    args = build_parser().parse_args([
+        "signal", "--as-of", "2026-09-24", "--dry-run", "--json"])
+
+    assert args.command == "signal"
+    assert args.as_of == date(2026, 9, 24)
+    assert args.dry_run is True
+    assert args.output_json is True
+
+
 # -------------------------------------------------------------------- dispatch
 
 

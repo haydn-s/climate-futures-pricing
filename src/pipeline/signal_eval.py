@@ -78,6 +78,25 @@ class Evaluation:
         )
 
 
+@dataclass(frozen=True)
+class FittedSignalModel:
+    """A selected estimator and the frozen rule that turns scores into trades."""
+
+    model_name: str
+    features: tuple[str, ...]
+    parameter: str
+    threshold: float
+    cost_rate: float
+    estimator: object
+
+    def scores(self, frame: pd.DataFrame) -> np.ndarray:
+        values = frame.loc[:, self.features].to_numpy(dtype="float64")
+        return _score(self.estimator, self.model_name, values)
+
+    def positions(self, frame: pd.DataFrame) -> np.ndarray:
+        return _positions(self.scores(frame), self.threshold)
+
+
 def transaction_cost(target: TargetSpec, *,
                      basis_points_per_leg: float = DEFAULT_COST_BPS_PER_LEG) -> float:
     """Round-trip cost charged whenever a signal opens a position."""
@@ -219,16 +238,13 @@ def _choose(frame: pd.DataFrame, features: tuple[str, ...], target_column: str,
 def _prediction_rows(train: pd.DataFrame, test: pd.DataFrame, *,
                      features: tuple[str, ...], target_column: str,
                      model_name: str, cost_rate: float, fold: int) -> pd.DataFrame:
-    parameter, factory, threshold = _choose(
-        train, features, target_column, model_name, cost_rate)
-    X_train = train.loc[:, features].to_numpy(dtype="float64")
-    y_train = train[target_column].to_numpy(dtype="float64")
-    X_test = test.loc[:, features].to_numpy(dtype="float64")
-    label_buffer = cost_rate + NEUTRAL_BUFFER
-    estimator = _fit(factory(), model_name, X_train, y_train, label_buffer)
-    scores = _score(estimator, model_name, X_test)
-    positions = _positions(scores, threshold)
+    fitted = fit_signal_model(
+        train, features=features, target_column=target_column,
+        model_name=model_name, cost_rate=cost_rate)
+    scores = fitted.scores(test)
+    positions = fitted.positions(test)
     actual = test[target_column].to_numpy(dtype="float64")
+    training_mean = float(train[target_column].mean())
     return pd.DataFrame({
         "date": test["date"].to_numpy(),
         "year": test["year"].to_numpy(),
@@ -236,14 +252,14 @@ def _prediction_rows(train: pd.DataFrame, test: pd.DataFrame, *,
         "score": scores,
         "signal": positions,
         "net": strategy_returns(actual, positions, cost_rate),
-        "baseline": float(np.mean(y_train)),
+        "baseline": training_mean,
         "baseline_signal": (
-            1 if float(np.mean(y_train)) > cost_rate
-            else -1 if float(np.mean(y_train)) < -cost_rate
+            1 if training_mean > cost_rate
+            else -1 if training_mean < -cost_rate
             else 0),
         "fold": fold,
-        "parameter": parameter,
-        "threshold": threshold,
+        "parameter": fitted.parameter,
+        "threshold": fitted.threshold,
         "cost_rate": cost_rate,
     })
 
@@ -285,8 +301,9 @@ def metrics(predictions: pd.DataFrame, *, regression: bool) -> StrategyMetrics:
     )
 
 
-def _eligible_rows(frame: pd.DataFrame, *, features: tuple[str, ...],
-                   target_column: str) -> pd.DataFrame:
+def eligible_rows(frame: pd.DataFrame, *, features: tuple[str, ...],
+                  target_column: str,
+                  extra_columns: tuple[str, ...] = ()) -> pd.DataFrame:
     """Select dated targets whose requested data family has begun coverage."""
     mask = frame[target_column].notna()
     forecast_features = tuple(column for column in FORECAST_INPUTS
@@ -300,8 +317,23 @@ def _eligible_rows(frame: pd.DataFrame, *, features: tuple[str, ...],
             mask &= frame["date"] >= first_forecast_date
         else:
             mask &= False
-    required = ["date", "year", target_column, *features]
+    required = ["date", "year", target_column, *features, *extra_columns]
     return frame.loc[mask, required].sort_values("date", ignore_index=True)
+
+
+def fit_signal_model(frame: pd.DataFrame, *, features: tuple[str, ...],
+                     target_column: str, model_name: str,
+                     cost_rate: float) -> FittedSignalModel:
+    """Select on a trailing validation block, then refit on permitted history."""
+    parameter, factory, threshold = _choose(
+        frame, features, target_column, model_name, cost_rate)
+    X = frame.loc[:, features].to_numpy(dtype="float64")
+    y = frame[target_column].to_numpy(dtype="float64")
+    estimator = _fit(
+        factory(), model_name, X, y, cost_rate + NEUTRAL_BUFFER)
+    return FittedSignalModel(
+        model_name=model_name, features=features, parameter=parameter,
+        threshold=threshold, cost_rate=cost_rate, estimator=estimator)
 
 
 def evaluate(frame: pd.DataFrame, *, features: tuple[str, ...], feature_set: str,
@@ -318,7 +350,7 @@ def evaluate(frame: pd.DataFrame, *, features: tuple[str, ...], feature_set: str
     if missing:
         raise ValueError(f"signal frame is missing columns: {', '.join(missing)}")
 
-    usable = _eligible_rows(frame, features=features, target_column=target_column)
+    usable = eligible_rows(frame, features=features, target_column=target_column)
     development = usable.loc[usable["year"] < holdout_year].reset_index(drop=True)
     holdout = usable.loc[usable["year"] >= holdout_year].reset_index(drop=True)
     cost_rate = transaction_cost(target, basis_points_per_leg=cost_bps_per_leg)

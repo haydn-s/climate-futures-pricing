@@ -1,4 +1,4 @@
-"""The pipeline's command line: check-config, fetch, clean, status.
+"""The pipeline's command line: check-config, fetch, clean, features, signal, status.
 
     PYTHONPATH=src python -m pipeline check-config
     PYTHONPATH=src python -m pipeline fetch --source nclimgrid --years 2012 --months 4-10
@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -189,6 +190,19 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", parents=[_global_options()],
                                  help="what is archived, and how current it is")
     status.add_argument("--source", default=None)
+
+    signal = commands.add_parser(
+        "signal", parents=[_global_options()],
+        help="fit the frozen model and emit an auditable paper-trading signal")
+    signal.add_argument(
+        "--as-of", type=date.fromisoformat, default=None,
+        help="latest date the run may use (YYYY-MM-DD; default: current UTC date)")
+    signal.add_argument(
+        "--dry-run", action="store_true",
+        help="print the signal without saving a model artifact or decision record")
+    signal.add_argument(
+        "--json", action="store_true", dest="output_json",
+        help="write the complete machine-readable decision record to stdout")
     return parser
 
 
@@ -373,6 +387,36 @@ def build_features(args: argparse.Namespace, geography: Geography,
     return 0
 
 
+def produce_signal(args: argparse.Namespace, geography: Geography,
+                   raw: RawStore, processed: ProcessedStore) -> int:
+    """Run the frozen candidate without granting it authority to trade."""
+    from .signal_inference import render_summary, run_primary_signal, save_run
+
+    as_of = args.as_of or datetime.now(timezone.utc).date()
+    try:
+        run = run_primary_signal(
+            raw=raw, processed=processed, geography=geography, as_of=as_of)
+        record = run.record
+        saved: tuple[Path, Path] | None = None
+        if not args.dry_run:
+            saved = save_run(run, raw.root)
+            record = json.loads(saved[0].read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"signal error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.output_json:
+        print(json.dumps(record, indent=2, sort_keys=True, allow_nan=False))
+    else:
+        print(render_summary(record))
+        if args.dry_run:
+            print("  dry run: no model artifact or decision record written")
+        elif saved:
+            print(f"  record:        {saved[0]}")
+            print(f"  model:         {saved[1]}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.data_root) if args.data_root else default_data_root()
@@ -388,6 +432,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return clean_source(args, sources, geography, raw, processed)
         if args.command == "features":
             return build_features(args, geography, processed)
+        if args.command == "signal":
+            return produce_signal(args, geography, raw, processed)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)

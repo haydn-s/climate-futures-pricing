@@ -138,8 +138,26 @@ Detailed assumptions and every comparison are in
 [`analysis/ml_signal_baseline_report.md`](analysis/ml_signal_baseline_report.md);
 machine-readable results are in
 [`analysis/ml_signal_baseline_results.csv`](analysis/ml_signal_baseline_results.csv).
+The frozen specification, archive hashes, intended use, and limitations are in
+[`models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md`](models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md).
 
 Run: `PYTHONPATH=src python analysis/ml_signal_baseline.py`
+
+The production inference path rebuilds the point-in-time frame, trains only on
+outcomes completed before the selected decision, and emits an auditable
+`BUY`/`SELL`/`HOLD` paper-trading record. It never submits an order. By default,
+the fitted artifact and JSON record are written beneath ignored `data/models/`
+and `data/signals/` directories; use `--dry-run` to inspect without writing.
+
+```bash
+PYTHONPATH=src python -m pipeline signal --dry-run
+PYTHONPATH=src python -m pipeline signal --json
+PYTHONPATH=src python -m pipeline signal --as-of 2026-09-24 --dry-run
+```
+
+On the frozen archive, the latest eligible decision is September 24, 2026. As of
+October 9 the raw model recommendation is `SELL`, but the input is 15 days old,
+so the safe external action is forced to `HOLD` and marked `STALE_INPUTS`.
 
 ### 5. Event timing is real but not cleanly attributable
 
@@ -323,6 +341,7 @@ PYTHONPATH=src python -m pipeline check-config
 PYTHONPATH=src python -m pipeline fetch --source usdm --states IA --years 2012
 PYTHONPATH=src python -m pipeline clean --source usdm
 PYTHONPATH=src python -m pipeline features --crop corn --peek 0 --growing-season
+PYTHONPATH=src python -m pipeline signal --dry-run
 PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
@@ -337,6 +356,7 @@ probing a source.
 config/                  source definitions and crop geography
 src/pipeline/            clients, ingestion, cleaning, storage, features, tests
 analysis/                research scripts and generated comparison reports
+models/                  frozen model cards and versioned baseline metadata
 tests/                   offline unit tests and captured-response fixtures
 tests/fixtures/*/        fixture provenance and upstream traps
 presentation/            proposal deck and its generator
@@ -350,6 +370,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Corn yield validation with honest trend fitting
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
+- [x] Frozen v1 model card, data hashes, and auditable paper-signal command
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] One-command current-data reproduction workflow
