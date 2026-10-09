@@ -47,6 +47,7 @@ ANALYSES = (
     "analysis/seasonal_timing.py",
     "analysis/forecast_verification.py",
     "analysis/forecast_peek_sweep.py",
+    "analysis/ml_signal_baseline.py",
     "analysis/cocoa_weather.py",
     "analysis/coffee_weather.py",
 )
