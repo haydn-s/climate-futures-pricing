@@ -1,0 +1,32 @@
+schema_version: 1
+
+# This template expects exported columns to be renamed to the labels below.
+# Once WRDS access is active, replace only the right-hand values with the exact
+# Datastream Futures field names shown in the authenticated data dictionary.
+source_name: lseg_datastream_futures_via_wrds
+source_url: https://wrds-www.wharton.upenn.edu/
+license_note: Licensed Duke/WRDS data; do not commit or redistribute raw or derived row-level data.
+query_reference: REPLACE_WITH_SAVED_WRDS_QUERY_OR_SQL_PATH
+
+columns:
+  date: date
+  root: root
+  contract: contract
+  last_trade_date: last_trade_date
+  open: open
+  high: high
+  low: low
+  settlement: settlement
+  volume: volume
+  open_interest: open_interest
+  maintenance_margin_usd: maintenance_margin_usd
+
+# Add any exact root labels returned by the export. Unknown values fail loudly.
+root_values:
+  ZC: ZC
+  C: ZC
+  ZW: ZW
+  W: ZW
+
+# Use 1 when exported prices are cents/bushel, 100 when they are dollars/bushel.
+price_multiplier_to_cents: 1.0

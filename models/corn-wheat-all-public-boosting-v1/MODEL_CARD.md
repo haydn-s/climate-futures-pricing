@@ -81,6 +81,29 @@ With `--as-of 2026-10-09`, the latest eligible decision is September 24, 2026,
 using market data through September 23. The fitted model reads `SELL`, but the
 input is 15 days old, so the safe emitted action is `HOLD`.
 
+## Post-freeze LSEG validation
+
+The October 12, 2026 validation replaces the continuous-series outcome with
+licensed dated ZC/ZW contracts while keeping the model, features, threshold,
+signals, and evaluation dates frozen. Same-date LSEG settlement targets have
+0.901 correlation and 97.2% sign agreement with the Yahoo targets across all
+285 out-of-sample decisions, so the original result is not explained solely by
+a continuous-series direction or roll artifact.
+
+The more conservative execution replay enters at the next shared session open,
+exits after five further sessions, suppresses overlapping positions, and charges
+$2.50 commission plus one tick of slippage per contract side. Development
+performance is −7.1% net with Sharpe −0.12 across 83 executed trades; the
+already-consumed holdout is +7.3% with Sharpe 0.68 across 17 trades. Development
+gross returns are positive under every tested roll window, but base and stress
+costs erase them. This is evidence against stable executable effectiveness, not
+a reason to tune v1 against the consumed history.
+
+The replay uses average leg notional as its denominator because historical
+margin is unavailable. It is not a return-on-capital backtest. Detailed methods
+and the sensitivity grid are in
+[`../../analysis/lseg_signal_replay_report.md`](../../analysis/lseg_signal_replay_report.md).
+
 ## Limitations and prohibited uses
 
 - Yahoo continuous series do not model executable contracts, rolls, margins,

@@ -1,0 +1,30 @@
+schema_version: 1
+
+# Exchange-defined contract mechanics. Source pages were checked 2026-10-09.
+contracts:
+  ZC:
+    name: Corn Futures
+    contract_size_bushels: 5000
+    tick_size_cents: 0.25
+    tick_value_usd: 12.50
+    listed_month_codes: [H, K, N, U, Z]
+    source_url: https://www.cmegroup.com/markets/agriculture/grains/corn
+  ZW:
+    name: Chicago SRW Wheat Futures
+    contract_size_bushels: 5000
+    tick_size_cents: 0.25
+    tick_value_usd: 12.50
+    listed_month_codes: [H, K, N, U, Z]
+    source_url: https://www.cmegroup.com/markets/agriculture/grains/wheat/specs
+
+# Research assumptions, not claims about exchange or broker charges. Change them
+# here and retain the config with every simulation result.
+execution:
+  fill_price_column: open_cents
+  holding_sessions: 5
+  roll_business_days: 10
+  commission_usd_per_contract_side: 2.50
+  slippage_ticks_per_contract_side: 1.0
+  max_contracts_per_leg: 8
+  max_margin_fraction: 1.0
+  allow_overlapping_positions: false

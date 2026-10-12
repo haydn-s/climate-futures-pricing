@@ -18,6 +18,7 @@ either dry-run or pointed at a stub module.
 
 from __future__ import annotations
 
+import json
 import sys
 import textwrap
 import types
@@ -25,6 +26,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import pandas as pd
 
 from pipeline import cli
 from pipeline.cli import _int_list, _states, build_parser, main
@@ -104,6 +106,25 @@ def test_signal_command_parses_as_of_and_never_implies_execution() -> None:
     assert args.as_of == date(2026, 9, 24)
     assert args.dry_run is True
     assert args.output_json is True
+
+
+def test_futures_commands_parse_without_implying_a_vendor() -> None:
+    imported = build_parser().parse_args([
+        "futures-import", "--input", "export.csv", "--mapping", "mapping.yaml",
+        "--out", "contracts", "--dry-run",
+    ])
+    assert imported.command == "futures-import"
+    assert imported.input == "export.csv"
+    assert imported.mapping == "mapping.yaml"
+    audited = build_parser().parse_args([
+        "futures-audit", "--contracts", "contracts.parquet", "--json",
+    ])
+    assert audited.output_json is True
+    backtest = build_parser().parse_args([
+        "futures-backtest", "--contracts", "contracts.parquet",
+        "--signals", "signals.csv", "--capital", "25000",
+    ])
+    assert backtest.capital == 25_000
 
 
 # -------------------------------------------------------------------- dispatch
@@ -309,3 +330,92 @@ def test_status_reports_what_is_archived_and_unconfigured(tmp_path: Path, monkey
     assert "usdm" in out and "1 keys" in out
     assert "newest publication 2012-12-27" in out
     assert "unconfigured secrets: NASS_API_KEY" in out
+
+
+def futures_vendor_export() -> pd.DataFrame:
+    rows = []
+    for number, day in enumerate(pd.bdate_range("2026-01-02", periods=7)):
+        corn = 400.0 + 1.25 * number
+        wheat = 500.0 - 0.75 * number
+        rows.extend([
+            {
+                "date": day, "root": "C", "contract": "ZCH26",
+                "last_trade_date": "2026-03-13", "open": corn,
+                "high": corn + 1, "low": corn - 1, "settlement": corn + 0.25,
+                "volume": 1000, "open_interest": 5000,
+                "maintenance_margin_usd": 1000,
+            },
+            {
+                "date": day, "root": "W", "contract": "ZWH26",
+                "last_trade_date": "2026-03-13", "open": wheat,
+                "high": wheat + 1, "low": wheat - 1, "settlement": wheat + 0.25,
+                "volume": 800, "open_interest": 4000,
+                "maintenance_margin_usd": 2000,
+            },
+        ])
+    return pd.DataFrame(rows)
+
+
+def test_futures_import_audit_and_backtest_run_end_to_end(tmp_path: Path, capsys) -> None:
+    export = tmp_path / "vendor.csv"
+    futures_vendor_export().to_csv(export, index=False)
+
+    assert main([
+        "futures-import", "--input", str(export), "--data-root", str(tmp_path),
+    ]) == 0
+    contracts = tmp_path / "processed" / "futures_contracts.parquet"
+    assert contracts.exists()
+    assert contracts.with_suffix(".manifest.json").exists()
+    imported_output = capsys.readouterr().out
+    assert "pricing valid: yes" in imported_output
+    assert "execution ready: yes" in imported_output
+
+    assert main([
+        "futures-audit", "--contracts", str(contracts), "--json",
+    ]) == 0
+    audit = json.loads(capsys.readouterr().out)
+    assert audit["ready_for_execution"] is True
+
+    signals = tmp_path / "signals.csv"
+    pd.DataFrame([
+        {"decision_date": "2026-01-01", "action": "BUY"},
+        {"decision_date": "2026-01-02", "action": "SELL"},
+    ]).to_csv(signals, index=False)
+    assert main([
+        "futures-backtest", "--contracts", str(contracts),
+        "--signals", str(signals), "--data-root", str(tmp_path),
+    ]) == 0
+    output = capsys.readouterr().out
+    assert "1 executed" in output
+    assert "SKIPPED_OVERLAP" in output
+    ledger = tmp_path / "processed" / "futures_trade_ledger.parquet"
+    assert ledger.exists()
+    assert ledger.with_suffix(".manifest.json").exists()
+
+
+def test_futures_import_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
+    export = tmp_path / "vendor.csv"
+    futures_vendor_export().to_csv(export, index=False)
+    assert main([
+        "futures-import", "--input", str(export), "--data-root", str(tmp_path),
+        "--dry-run",
+    ]) == 0
+    assert "dry run" in capsys.readouterr().out
+    assert not (tmp_path / "processed").exists()
+
+
+def test_workspace_download_dry_run_never_opens_lseg(tmp_path: Path, capsys) -> None:
+    assert main([
+        "futures-workspace-download",
+        "--start", "2024-11-01",
+        "--end", "2024-11-08",
+        "--delivery-years", "2024",
+        "--roots", "ZC",
+        "--data-root", str(tmp_path),
+        "--dry-run",
+    ]) == 0
+    output = capsys.readouterr().out
+    assert "Workspace dry run: 5 contracts" in output
+    assert "ZCH24" in output and "CH24^2" in output
+    assert "Workspace was not opened" in output
+    assert not (tmp_path / "raw").exists()
