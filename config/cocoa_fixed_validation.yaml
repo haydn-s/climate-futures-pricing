@@ -1,0 +1,51 @@
+schema_version: 1
+protocol_id: cocoa-fixed-validation-v1
+locked_on: 2026-10-12
+
+status: retrospective_fixed_specification_after_baseline_search
+candidate:
+  name: weather_market_logistic
+  feature_set: weather_market
+  model: logistic
+  horizon_sessions: 5
+
+information_boundary:
+  development_end_year: 2023
+  consumed_diagnostic_start_year: 2024
+  consumed_diagnostic_used_for_gate: false
+
+execution:
+  dated_contract_source: LSEG ICE-US CC
+  entry: next same-contract session open
+  exit: five sessions after entry at the same-contract open
+  roll_business_days: 10
+  overlapping_positions: prohibited
+  costs: row-specific notional rate for one tick plus USD 2.50 commission per side
+  cost_multipliers: [0.0, 1.0, 2.0]
+
+baselines: [no_trade, long_only, short_only, momentum, mean_reversion]
+
+uncertainty:
+  random_seed: 590
+  draws: 10000
+  bootstrap_unit: calendar_year
+  null: within-year circular shift of frozen raw actions
+
+acceptance_gate:
+  minimum_development_trades: 30
+  minimum_development_sharpe: 0.50
+  minimum_positive_fold_fraction: 0.60
+  minimum_positive_year_fraction: 0.60
+  must_beat_best_baseline_net: true
+  must_beat_best_baseline_sharpe: true
+  must_remain_positive_at_double_cost: true
+  minimum_year_bootstrap_probability_positive: 0.80
+  maximum_circular_shift_null_p_value: 0.10
+  maximum_development_drawdown: 0.25
+
+promotion:
+  allowed_from_this_test: false
+  reason: >-
+    The specification was selected after reviewing the same development history;
+    this round can validate robustness or document failure, but only genuinely
+    prospective observations can confirm a trading edge.

@@ -306,7 +306,7 @@ def build(processed: ProcessedStore, geography: Geography, *, crop: str = "corn"
     if peek_days < 0:
         raise ValueError(f"peek_days must be >= 0, found {peek_days}")
     crop_spec = geography.crop(crop)
-    states = tuple(state.postal for state in crop_spec.states) or None
+    states = tuple(state.postal for state in crop_spec.states)
 
     prices = processed.read("yahoo_prices_daily")
     available = set(prices["series"].unique())
@@ -345,7 +345,13 @@ def build(processed: ProcessedStore, geography: Geography, *, crop: str = "corn"
                 unavailable.append(column)
             feature_sources[column] = source
 
-    drought = belt_drought(processed.read("usdm_county_drought"), states)
+    # A points-only crop has no US drought or county-weather geography. Passing
+    # None here used to mean "all states", silently attaching the entire US
+    # drought record to cocoa and coffee.
+    drought = (
+        belt_drought(processed.read("usdm_county_drought"), states)
+        if states else pd.DataFrame()
+    )
     attach(drought, ["d0", "d2", "d3",
                      *[f"d2_delta{lag}" for lag in DROUGHT_DELTAS],
                      *[f"d0_delta{lag}" for lag in DROUGHT_DELTAS]], "usdm")
@@ -356,8 +362,11 @@ def build(processed: ProcessedStore, geography: Geography, *, crop: str = "corn"
                      *[f"precip{w}" for w in PRECIP_WINDOWS],
                      *[f"precip{w}_z" for w in PRECIP_WINDOWS]], "nasa_power")
 
-    counties = (belt_counties(processed.read("nclimgrid_county_daily"), states)
-                if "nclimgrid_county_daily" in processed.names() else pd.DataFrame())
+    counties = (
+        belt_counties(processed.read("nclimgrid_county_daily"), states)
+        if states and "nclimgrid_county_daily" in processed.names()
+        else pd.DataFrame()
+    )
     attach(counties, ["cty_tmax_c", *[f"cty_heat_dd{w}" for w in HEAT_WINDOWS]], "nclimgrid")
 
     # The forecast block. Tradeable at its publication date, unlike everything

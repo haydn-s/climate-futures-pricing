@@ -251,6 +251,27 @@ def test_an_unfillable_feature_is_declared_rather_than_dropped(tmp_path, geograp
     assert "heat_dd7" in spec.feature_sources
 
 
+def test_points_only_crop_does_not_inherit_all_us_drought(tmp_path, geography) -> None:
+    processed = ProcessedStore(tmp_path)
+    processed.write("yahoo_prices_daily", price_frame(
+        "2012-01-02", 60, series=("cocoa",)
+    ))
+    processed.write("usdm_county_drought", drought_frame(
+        ["2012-01-03", "2012-02-07"], states=("IA",)
+    ))
+    processed.write("nasa_power_point_daily", power_frame(
+        "2012-01-01", 60, crop="cocoa", points=("Soubre",)
+    ))
+
+    frame, spec = panel.build(
+        processed, geography, crop="cocoa", price_series=("cocoa",)
+    )
+
+    assert frame["d2"].isna().all()
+    assert frame["cty_tmax_c"].isna().all()
+    assert {"d2", "cty_tmax_c"}.issubset(spec.unavailable)
+
+
 def test_the_tradeable_split_follows_publication_lag_not_preference(store, geography) -> None:
     """nClimGrid is a month late, so its features can never be a trading signal."""
     _, spec = panel.build(store, geography)

@@ -1,0 +1,2 @@
+bootstrap_draws,bootstrap_p025,bootstrap_median,bootstrap_p975,bootstrap_probability_positive,permutation_draws,permutation_p_value,year_blocks,observed_total_net
+10000,-0.33738761,0.19883431,0.77486940,0.76040000,10000,0.16258374,11,0.20376375

@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from pipeline.lseg_workspace_futures import (
     ContractRequest,
@@ -15,6 +16,7 @@ from pipeline.lseg_workspace_futures import (
     lseg_ric,
     normalize_history,
     save_workspace_download,
+    WorkspaceFuturesError,
 )
 
 
@@ -43,6 +45,9 @@ def test_lseg_ric_uses_archive_decade_and_live_forms() -> None:
     assert lseg_ric("ZW", "Z", 2023, as_of=as_of) == "WZ3^2"
     assert lseg_ric("ZC", "Z", 2024, as_of=as_of) == "CZ24^2"
     assert lseg_ric("ZW", "Z", 2026, as_of=as_of) == "WZ26"
+    assert lseg_ric("CC", "Z", 2012, as_of=as_of) == "CCZ2^1"
+    assert lseg_ric("CC", "Z", 2024, as_of=as_of) == "CCZ4^2"
+    assert lseg_ric("CC", "Z", 2026, as_of=as_of) == "CCZ6"
 
 
 def test_contract_requests_have_stable_canonical_symbols() -> None:
@@ -50,6 +55,18 @@ def test_contract_requests_have_stable_canonical_symbols() -> None:
     assert len(requests) == 10
     assert requests[0] == ContractRequest("ZC", 2024, "H", "ZCH24", "CH24^2")
     assert requests[-1] == ContractRequest("ZW", 2024, "Z", "ZWZ24", "WZ24^2")
+
+
+def test_cocoa_requests_use_ice_rics_and_stable_contracts() -> None:
+    requests = contract_requests([2024], ["CC"], as_of=date(2026, 1, 1))
+    assert len(requests) == 5
+    assert requests[0] == ContractRequest("CC", 2024, "H", "CCH24", "CCH4^2")
+    assert requests[-1] == ContractRequest("CC", 2024, "Z", "CCZ24", "CCZ4^2")
+
+
+def test_different_quote_units_must_be_downloaded_separately() -> None:
+    with pytest.raises(WorkspaceFuturesError, match="quote units"):
+        contract_requests([2024], ["ZC", "CC"], as_of=date(2026, 1, 1))
 
 
 def test_normalize_history_parses_expiry_and_records_incomplete_rows() -> None:
@@ -116,3 +133,16 @@ def test_download_uses_one_desktop_session_and_preserves_query_details(tmp_path:
     assert payload["successful_contracts"] == 5
     assert len(payload["export_sha256"]) == 64
     assert "maintenance_margin_usd" not in mapping.read_text(encoding="utf-8")
+
+
+def test_cocoa_mapping_converts_lseg_dollars_per_tonne_to_cents(tmp_path: Path) -> None:
+    fake = FakeLseg()
+    download = download_workspace_history(
+        start=date(2024, 11, 1), end=date(2024, 11, 8),
+        delivery_years=[2024], roots=["CC"], lseg=fake,
+        as_of=date(2026, 10, 12),
+    )
+    _, _, mapping = save_workspace_download(download, tmp_path, stem="cc_daily")
+    payload = __import__("yaml").safe_load(mapping.read_text(encoding="utf-8"))
+    assert payload["root_values"] == {"CC": "CC"}
+    assert payload["price_multiplier_to_cents"] == 100.0
