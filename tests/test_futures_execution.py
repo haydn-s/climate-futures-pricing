@@ -168,6 +168,41 @@ def test_buy_trade_uses_next_open_and_deducts_round_trip_costs() -> None:
     assert trade["return_on_margin"] == pytest.approx(3239 / 13_000)
 
 
+def test_capital_account_marks_to_realized_pnl_after_trade() -> None:
+    ledger = simulate_spread_trades(
+        pd.DataFrame([
+            {"decision_date": "2026-01-01", "action": "BUY"},
+            {"decision_date": "2026-01-05", "action": "SELL"},
+        ]),
+        sample_panel(),
+        config=one_session_config(),
+        capital_usd=25_000.0,
+    )
+    trade = ledger.iloc[0]
+    assert trade["status"] == "EXECUTED"
+    assert trade["capital_before_usd"] == 25_000.0
+    assert trade["margin_budget_usd"] == 25_000.0
+    assert trade["margin_utilization"] == pytest.approx(13_000 / 25_000)
+    assert trade["return_on_capital"] == pytest.approx(3239 / 25_000)
+    assert trade["capital_after_usd"] == 28_239.0
+    assert ledger.iloc[1]["capital_before_usd"] == 28_239.0
+
+
+def test_capital_simulation_refuses_overlapping_account_lookahead() -> None:
+    config = one_session_config()
+    config = ExecutionConfig(
+        contracts=config.contracts,
+        assumptions=replace(config.assumptions, allow_overlapping_positions=True),
+    )
+    with pytest.raises(ExecutionError, match="requires non-overlapping"):
+        simulate_spread_trades(
+            pd.DataFrame([{"decision_date": "2026-01-01", "action": "BUY"}]),
+            sample_panel(),
+            config=config,
+            capital_usd=25_000.0,
+        )
+
+
 def test_sell_reverses_both_legs() -> None:
     ledger = simulate_spread_trades(
         pd.DataFrame([{"decision_date": "2026-01-01", "action": "SELL"}]),

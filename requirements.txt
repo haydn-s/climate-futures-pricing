@@ -6,6 +6,7 @@ ipykernel>=6.30
 # Pipeline: config, columnar storage, tests
 pyyaml>=6.0
 pyarrow>=16.0
+pypdf>=6.0
 pytest>=8.0
 # Modelling and serialized research-signal artifacts
 scikit-learn>=1.5

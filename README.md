@@ -39,7 +39,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
-| Can market-neutral targets and nonlinear models turn the null into a signal? | One primary and one marginal configuration clear the research gate, but the primary signal is not stable under the first dated-contract execution replay. | Nested walk-forward selection, a fixed 2024–2026 holdout, and a post-freeze LSEG replay. |
+| Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
@@ -105,7 +105,7 @@ PYTHONPATH=src python analysis/forecast_verification.py
 PYTHONPATH=src python analysis/forecast_peek_sweep.py
 ```
 
-### 4. Market-neutral modeling produces a paper-trading candidate
+### 4. Market-neutral modeling produces a candidate that fails final validation
 
 The signal benchmark tests three five-day targets: raw corn returns, corn minus
 wheat, and corn minus a trailing-beta soybean/wheat basket. It crosses those with
@@ -113,8 +113,9 @@ three feature sets—crop-stage weather, added price regimes, and added CPC
 forecasts—and Ridge, logistic, and shallow gradient-boosting models.
 
 Hyperparameters and buy/sell/hold thresholds are selected inside each expanding
-training block. Outer folds move forward with an embargo, 2024–2026 remains a
-fixed final holdout, and every trade pays five basis points per leg. Market
+training block. Outer folds move forward with an embargo, the original study
+reserved 2024–2026 as its final holdout, and every trade pays five basis points
+per leg. Market
 features exclude the close used to enter the target return; CPC inputs are
 delayed one session because the archive records release dates but not times, and
 forecast-enhanced specifications begin when CPC coverage starts in 2012.
@@ -130,9 +131,10 @@ with Ridge also passes, but its 1.0% holdout return and 0.14 Sharpe make it a
 marginal result rather than the preferred candidate.
 
 Every regression model still has negative out-of-sample R², and the final
-holdout has now been reviewed. The supported deliverable is therefore a
+holdout has now been reviewed. At that stage, the supported deliverable was a
 **candidate for prospective paper trading**, not evidence sufficient for live
-capital.
+capital. The later dated-contract studies below reject promotion while retaining
+the frozen model only for prospective falsification.
 
 Detailed assumptions and every comparison are in
 [`analysis/ml_signal_baseline_report.md`](analysis/ml_signal_baseline_report.md);
@@ -188,9 +190,10 @@ pricing audit passes. The query manifest records 23,990 rows lacking complete
 OHLC and two rows with impossible open/high/low relationships that were excluded
 from the import export. Reconstructed front-month returns have zero median
 absolute daily-return difference from the existing Yahoo continuous histories;
-correlations are 0.803 for corn and 0.942 for wheat. Execution remains blocked
-only for the full capital-constrained backtest because dated historical
-maintenance margin is not yet present.
+correlations are 0.803 for corn and 0.942 for wheat. Official CME minimum-
+performance-bond history now supplies dated margin for the public June 30, 2020
+through June 30, 2026 window; earlier contract prices remain useful for the
+price-only replay but are excluded from return-on-capital claims.
 
 A post-freeze replay now tests v1 without retraining or changing its threshold.
 Replacing the Yahoo target with same-date LSEG settlements preserves the market
@@ -211,6 +214,82 @@ The aggregate tables can be committed; the row-level licensed ledger remains
 ignored under `data/analysis/`.
 
 Run: `PYTHONPATH=src python analysis/lseg_signal_replay.py`
+
+The fixed-specification attribution study shows where development performance
+is lost. Replacing Yahoo with dated LSEG settlement reduces aggregate net by
+32.7 percentage points; shifting to next-open execution removes another 2.8
+points. Applying the frozen no-overlap rule is the largest operational change,
+removing 49 clustered signals and 30.7 points. Replacing the equivalent 10-bps
+bridge with per-contract commission and slippage removes the final 13.8 points,
+leaving −7.1%. Confidence is not monotonically related to performance, so the
+diagnostic does not support a defensible retrospective threshold adjustment.
+The year-block development interval is wide (−42.5% to +37.1%), emphasizing
+uncertainty rather than a stable negative or positive edge.
+
+Full attribution, cost capacity, aggregate direction/confidence/season/roll
+strata, and uncertainty are in
+[`analysis/lseg_execution_attribution_report.md`](analysis/lseg_execution_attribution_report.md).
+Run: `PYTHONPATH=src python analysis/lseg_execution_attribution.py`
+
+The final bounded modeling round learns dated-contract next-open outcomes
+directly and tests corn-minus-wheat, corn-only, and wheat-only targets. Ten
+predeclared elastic-net, shallow-boosting, and cost-aware three-way models are
+compared with seven simple rules over identical embargoed forward folds. Model
+selection ends in 2023; the already consumed 2024–2026 history is diagnostic
+only. Calendar-year bootstraps, within-year circular-shift nulls, doubled-cost
+stress, direction/year/regime strata, and an explicit acceptance gate are all
+reported.
+
+No candidate clears the complete gate. The spread models are approximately flat
+to negative after execution, and the best corn model is materially weaker than
+a simple momentum rule. A wheat elastic net is the strongest diagnostic result
+(+52.2% arithmetic development net on average-leg notional, Sharpe 0.70,
+circular-shift p=2.9%), but it is positive in only two of four forward folds,
+so it is not promoted. Its feature set is still the corn-centered public panel,
+so this is a control target rather than a wheat-specific climate model. The
+supported final retrospective conclusion is **NO ROBUST EDGE DEMONSTRATED**.
+
+The locked protocol and results are in
+[`docs/corn_wheat_final_validation_protocol.md`](docs/corn_wheat_final_validation_protocol.md)
+and [`analysis/corn_wheat_final_validation_report.md`](analysis/corn_wheat_final_validation_report.md).
+
+Run: `PYTHONPATH=src python analysis/corn_wheat_final_validation.py`
+
+The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
+code to the expiry-ordered LSEG contract strip, and creates an ignored,
+execution-ready panel. All 28,387 contract rows inside the public window match
+an exact business-date/roll-position rate. The capital replay resets each sample
+to $10k, $25k, $50k, or $100k and lets realized P&L change the next trade's
+budget. All four development paths lose money; the least-negative is −3.7% on
+$100k. The already-consumed holdout remains positive but is descriptive only.
+The full aggregate results and source hashes are in
+[`analysis/lseg_capital_simulation_report.md`](analysis/lseg_capital_simulation_report.md).
+
+```bash
+PYTHONPATH=src python -m pipeline futures-margin-enrich \
+  --contracts data/processed/futures_contracts.parquet \
+  --corn-pdf /path/to/C-2020-to-present.pdf \
+  --wheat-pdf /path/to/W-2020-to-present.pdf
+PYTHONPATH=src python analysis/lseg_capital_simulation.py
+```
+
+Prospective validation now uses separate immutable decision and outcome
+records. A decision must be registered on its decision date before the LSEG
+panel contains a possible next-session entry. The later resolver applies the
+same contract selection, holding period, costs, and no-overlap policy and links
+the outcome to hashes of the original decision, config, and resolving contract
+snapshot. Neither command has order authority. The weekly operating procedure
+is documented in
+[`docs/prospective_paper_trading.md`](docs/prospective_paper_trading.md).
+
+```bash
+PYTHONPATH=src python -m pipeline paper-register \
+  --signal-record data/signals/corn-wheat-all-public-boosting-v1/RECORD.json \
+  --contracts data/processed/futures_contracts.parquet
+PYTHONPATH=src python -m pipeline paper-resolve \
+  --contracts data/processed/futures_contracts.parquet
+PYTHONPATH=src python -m pipeline paper-status
+```
 
 ### 5. Event timing is real but not cleanly attributable
 
@@ -398,6 +477,12 @@ PYTHONPATH=src python -m pipeline signal --dry-run
 PYTHONPATH=src python -m pipeline futures-workspace-download \
   --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
 PYTHONPATH=src python analysis/lseg_signal_replay.py
+PYTHONPATH=src python analysis/lseg_execution_attribution.py
+PYTHONPATH=src python -m pipeline paper-register \
+  --signal-record SIGNAL.json --contracts data/processed/futures_contracts.parquet --dry-run
+PYTHONPATH=src python -m pipeline paper-resolve \
+  --contracts data/processed/futures_contracts.parquet --dry-run
+PYTHONPATH=src python -m pipeline paper-status
 PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
@@ -429,6 +514,9 @@ reproduce.py             resumable end-to-end workflow
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command
 - [x] Licensed LSEG Workspace contract downloader and validated 2011-2026 ZC/ZW panel
 - [x] Frozen-signal LSEG target and next-open execution replay with cost sensitivity
+- [x] Fixed-specification execution attribution and cost-capacity diagnostics
+- [x] Immutable, hash-linked prospective paper decision and outcome workflow
+- [x] Official CME dated-margin ingestion and 2020-2026 capital-constrained replay
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] One-command current-data reproduction workflow

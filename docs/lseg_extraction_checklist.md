@@ -95,14 +95,27 @@ partial export as complete merely because it can be imported.
 All `data/` files are ignored. Licensed row-level data and derivatives must not
 be committed or redistributed without confirming the applicable LSEG license.
 
-## 5. Resolve margin separately
+## 5. Attach CME dated margin separately
 
 The Workspace price response does not provide dated maintenance margin. The
-generated mapping deliberately omits `maintenance_margin_usd`; pricing can pass
-validation, but the audit remains `execution ready: NO` and the backtest refuses
-to run. Do not repeat today's margin across history. Obtain dated CME margin
-records or adopt and document a conservative research proxy before claiming an
-executable return history.
+generated mapping therefore omits `maintenance_margin_usd`. Download the
+official corn and wheat PDFs from [CME's historical-margin page](https://www.cmegroup.com/solutions/risk-management/margin-services/historical-margins.html)
+and run:
+
+```bash
+PYTHONPATH=src python -m pipeline futures-margin-enrich \
+  --contracts data/processed/futures_contracts.parquet \
+  --corn-pdf /path/to/C-2020-to-present.pdf \
+  --wheat-pdf /path/to/W-2020-to-present.pdf
+```
+
+The resulting ignored `futures_contracts_with_margin.parquet` is execution
+ready for the public June 30, 2020 through June 30, 2026 source window. The
+sidecar records both PDF hashes, the original contract-panel hash, coverage,
+match counts, and the mapping interpretation. Do not extend the final rate past
+the source end or repeat it into earlier years. Pre-2020 completion requires the
+paid [CME DataMine history](https://datamine.new.cmegroup.com/catalog/dataset/77ccab5f5c224ab6811fad891b497276)
+or another authoritative dated source.
 
 ## Later DSWS option
 

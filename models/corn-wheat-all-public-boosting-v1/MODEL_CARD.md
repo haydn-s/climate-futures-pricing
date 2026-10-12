@@ -99,10 +99,14 @@ gross returns are positive under every tested roll window, but base and stress
 costs erase them. This is evidence against stable executable effectiveness, not
 a reason to tune v1 against the consumed history.
 
-The replay uses average leg notional as its denominator because historical
-margin is unavailable. It is not a return-on-capital backtest. Detailed methods
-and the sensitivity grid are in
+The original replay uses average leg notional so its full 2015-2026 history is
+not a return-on-capital backtest. A separate dated-margin replay covers the
+official CME public window from June 30, 2020 through June 30, 2026. Every tested
+development capital path is negative; the least-negative result is −3.7% on
+$100,000 of starting capital. Detailed methods and the sensitivity grid are in
 [`../../analysis/lseg_signal_replay_report.md`](../../analysis/lseg_signal_replay_report.md).
+The capital results and source hashes are in
+[`../../analysis/lseg_capital_simulation_report.md`](../../analysis/lseg_capital_simulation_report.md).
 
 ## Limitations and prohibited uses
 
@@ -125,3 +129,23 @@ Freeze v1 during its initial paper-trading period. Log every eligible signal
 before its outcome is known, investigate operational failures without changing
 the specification, and defer performance-driven tuning until a meaningful unseen
 sample—preferably a complete growing season—has accumulated.
+
+The enforced workflow is documented in
+[`../../docs/prospective_paper_trading.md`](../../docs/prospective_paper_trading.md).
+It writes an immutable same-day decision record before entry data exist, then
+appends a separately hash-linked outcome after the five-session horizon. Late or
+backfilled registrations are rejected rather than relabeled as prospective.
+
+The final execution-aligned development round was locked and run on October 12,
+2026. It compared ten finite model specifications with seven simple rules using
+actual next-open LSEG outcomes. No candidate passed every development-only gate,
+so no v2 was promoted. The strongest diagnostic candidate was a wheat elastic
+net, but it was positive in only two of four forward folds. V1 remains frozen
+only so future observations can falsify or reinforce the negative retrospective
+conclusion; it has not regained deployment status.
+
+The campaign is recorded in [`prospective_campaign.json`](prospective_campaign.json).
+Its first registration is an ineligible `OPERATIONAL_HOLD`: the latest archived
+decision was already 18 days old. This verifies that the ledger refuses to call
+a late decision prospective. The first evidentiary observation must be a future
+same-day registration.

@@ -1,0 +1,3 @@
+sample,year_blocks,bootstrap_draws,observed_total_net,bootstrap_total_net_p025,bootstrap_total_net_median,bootstrap_total_net_p975,bootstrap_probability_positive
+development,9,10000,-0.07068214,-0.42517769,-0.08663375,0.37069919,0.34460000
+holdout,3,10000,0.07349791,0.03248318,0.07349791,0.13427423,1.00000000

@@ -91,7 +91,8 @@ def size_price_only_spread(
     )
 
 
-def _prepare_contracts(frame: pd.DataFrame) -> pd.DataFrame:
+def prepare_contracts(frame: pd.DataFrame) -> pd.DataFrame:
+    """Normalize the price fields required by a margin-free LSEG replay."""
     missing = sorted(REQUIRED_CONTRACT_COLUMNS - set(frame.columns))
     if missing:
         raise ReplayError(f"contract panel is missing: {', '.join(missing)}")
@@ -206,7 +207,7 @@ def replay_frozen_signals(
     if roll_days < 0 or commission < 0 or slippage_ticks < 0:
         raise ReplayError("roll, commission, and slippage assumptions cannot be negative")
 
-    panel = _prepare_contracts(contracts)
+    panel = prepare_contracts(contracts)
     decisions = _prepare_predictions(predictions)
     root_dates = {
         root: set(panel.loc[panel["root"] == root, "date"])
@@ -276,6 +277,12 @@ def replay_frozen_signals(
                 max_contracts_per_leg=assumptions.max_contracts_per_leg,
             )
             quantities = {"ZC": size.corn_contracts, "ZW": size.wheat_contracts}
+            nearest = {
+                root: panel[
+                    (panel["date"] == entry_date) & (panel["root"] == root)
+                ].sort_values(["last_trade_date", "contract"]).iloc[0]
+                for root in ("ZC", "ZW")
+            }
             unsigned_pnl = sum([
                 _leg_pnl(
                     float(entries["ZC"][assumptions.fill_price_column]),
@@ -299,6 +306,26 @@ def replay_frozen_signals(
             cost_usd = commission_usd + slippage_usd
             denominator = size.average_leg_notional_usd
             unsigned_return = unsigned_pnl / denominator
+            corn_unsigned_pnl = _leg_pnl(
+                float(entries["ZC"][assumptions.fill_price_column]),
+                float(exits["ZC"][assumptions.fill_price_column]),
+                quantity=quantities["ZC"], side=1,
+                spec=config.contracts["ZC"],
+            )
+            wheat_unsigned_pnl = _leg_pnl(
+                float(entries["ZW"][assumptions.fill_price_column]),
+                float(exits["ZW"][assumptions.fill_price_column]),
+                quantity=quantities["ZW"], side=1,
+                spec=config.contracts["ZW"],
+            )
+            corn_cost_usd = 2 * quantities["ZC"] * (
+                commission
+                + slippage_ticks * config.contracts["ZC"].tick_value_usd
+            )
+            wheat_cost_usd = 2 * quantities["ZW"] * (
+                commission
+                + slippage_ticks * config.contracts["ZW"].tick_value_usd
+            )
             signal = int(decision.signal)
             overlap = bool(
                 signal != 0
@@ -320,6 +347,20 @@ def replay_frozen_signals(
                 "exit_date": exit_date,
                 "corn_contract": entries["ZC"]["contract"],
                 "wheat_contract": entries["ZW"]["contract"],
+                "corn_nearest_contract": nearest["ZC"]["contract"],
+                "wheat_nearest_contract": nearest["ZW"]["contract"],
+                "corn_rolled_forward": (
+                    entries["ZC"]["contract"] != nearest["ZC"]["contract"]
+                ),
+                "wheat_rolled_forward": (
+                    entries["ZW"]["contract"] != nearest["ZW"]["contract"]
+                ),
+                "corn_business_days_to_last_trade_at_exit": int(np.busday_count(
+                    exit_date.date(), entries["ZC"]["last_trade_date"].date()
+                )),
+                "wheat_business_days_to_last_trade_at_exit": int(np.busday_count(
+                    exit_date.date(), entries["ZW"]["last_trade_date"].date()
+                )),
                 "corn_contracts": size.corn_contracts,
                 "wheat_contracts": size.wheat_contracts,
                 "corn_entry_cents": float(entries["ZC"][assumptions.fill_price_column]),
@@ -331,6 +372,25 @@ def replay_frozen_signals(
                 "average_leg_notional_usd": denominator,
                 "notional_imbalance_fraction": size.imbalance_fraction,
                 "execution_unsigned_gross_return": unsigned_return,
+                "execution_unsigned_corn_return": (
+                    corn_unsigned_pnl / size.corn_notional_usd
+                ),
+                "execution_unsigned_wheat_return": (
+                    wheat_unsigned_pnl / size.wheat_notional_usd
+                ),
+                # Potential cost fields do not depend on the model action.  They
+                # let a validation target learn the actual next-open contract
+                # economics even when the dummy action used to construct the
+                # outcome panel is HOLD.
+                "potential_commission_usd": commission_usd,
+                "potential_slippage_usd": slippage_usd,
+                "potential_cost_return": cost_usd / denominator,
+                "potential_corn_cost_return": (
+                    corn_cost_usd / size.corn_notional_usd
+                ),
+                "potential_wheat_cost_return": (
+                    wheat_cost_usd / size.wheat_notional_usd
+                ),
                 "execution_gross_pnl_usd": execution_signal * unsigned_pnl,
                 "execution_commission_usd": abs(execution_signal) * commission_usd,
                 "execution_slippage_usd": abs(execution_signal) * slippage_usd,
@@ -345,6 +405,11 @@ def replay_frozen_signals(
             if execution_signal != 0:
                 previous_trade_exit = exit_date
         except (ExecutionError, ReplayError, IndexError) as exc:
-            row.update({"execution_status": "SKIPPED_NO_CONTRACT", "execution_error": str(exc)})
+            row.update({
+                "execution_status": "SKIPPED_NO_CONTRACT",
+                "entry_date": entry_date,
+                "exit_date": exit_date,
+                "execution_error": str(exc),
+            })
         rows.append(row)
     return pd.DataFrame(rows)

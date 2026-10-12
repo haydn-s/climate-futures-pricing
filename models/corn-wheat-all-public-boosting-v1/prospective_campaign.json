@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "campaign_id": "corn-wheat-prospective-falsification-v1",
+  "started_on": "2026-10-12",
+  "status": "ACTIVE_OBSERVATION_ONLY",
+  "orders_authorized": false,
+  "model_version": "corn-wheat-all-public-boosting-v1",
+  "selection_status": "retained frozen; not reselected",
+  "reason": "No candidate in corn-wheat-final-validation-v1 cleared the development-only acceptance gate, so no v2 was promoted.",
+  "protocol": {
+    "path": "config/corn_wheat_final_validation.yaml",
+    "protocol_id": "corn-wheat-final-validation-v1",
+    "sha256": "db33f7f30e1545707c003cb92bcea9bb1f6233394767575c436fe52df837469c"
+  },
+  "minimum_evidence": {
+    "eligible_decisions": 30,
+    "complete_growing_seasons": 1,
+    "performance_tuning_before_minimum": false
+  },
+  "initial_audit": {
+    "paper_id": "7b72bf7a1d628202cdd5",
+    "registered_at_utc": "2026-10-12T20:38:41.077986+00:00",
+    "status": "OPERATIONAL_HOLD",
+    "eligible_for_prospective_evidence": false,
+    "reason": "The latest available decision was 18 calendar days old and was correctly forced to HOLD.",
+    "contract_snapshot_sha256": "03162fe8ead6dc7b216d4d36483a61ea0f2364575e7ec1f53eead27ecbc1aa8a"
+  },
+  "evidence_at_start": {
+    "registered_decisions": 1,
+    "eligible_decisions": 0,
+    "resolved_outcomes": 0
+  }
+}

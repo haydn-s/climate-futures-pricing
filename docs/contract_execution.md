@@ -98,5 +98,30 @@ for the full comparison and sensitivity grid. The detailed licensed ledger is
 written to ignored `data/analysis/`; only aggregate results belong in version
 control.
 
-Dated historical maintenance margin remains necessary for the full
-capital-constrained backtest and any claim about return on posted capital.
+## Dated-margin capital replay
+
+[CME's public historical-margin page](https://www.cmegroup.com/solutions/risk-management/margin-services/historical-margins.html)
+currently links corn and wheat "Minimum
+Performance Bond Requirements" PDFs covering June 30, 2020 through June 30,
+2026. Install `pypdf` through `requirements.txt`, download both official files,
+then create the execution-ready covered-date panel:
+
+```bash
+PYTHONPATH=src python -m pipeline futures-margin-enrich \
+  --contracts data/processed/futures_contracts.parquet \
+  --corn-pdf /path/to/C-2020-to-present.pdf \
+  --wheat-pdf /path/to/W-2020-to-present.pdf
+PYTHONPATH=src python analysis/lseg_capital_simulation.py
+```
+
+The parser retains the CME business date, roll product code, source URL, and
+PDF hashes. `C-01`/`W-01` and subsequent codes are mapped to the LSEG strip in
+last-trade-date order. Rates are joined only on exact business dates; none are
+filled before or after the public source window. The simulation sums the two
+outright requirements and takes no SPAN spread credit. It therefore remains a
+conservative research approximation and does not include broker add-ons.
+
+The public files do not cover the earlier 2015-2020 model decisions. A complete
+full-history replay requires the paid [CME DataMine agriculture margin CSV](https://datamine.new.cmegroup.com/catalog/dataset/77ccab5f5c224ab6811fad891b497276)
+or an equivalently authoritative source; current margins must never be repeated
+backward.
