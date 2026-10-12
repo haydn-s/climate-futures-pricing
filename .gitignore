@@ -7,7 +7,7 @@ data/
 .DS_Store
 node_modules/
 # Derived from data/ for the deck's charts
-presentation/chart_data.json
+presentation/**/chart_data.json
 presentation/previews/
 # PowerPoint lock files
 ~$*
