@@ -68,8 +68,8 @@ class ImportSpec:
             raise FuturesDataError("source_name and license_note must be non-empty")
         if not np.isfinite(self.price_multiplier_to_cents) or self.price_multiplier_to_cents <= 0:
             raise FuturesDataError("price_multiplier_to_cents must be positive")
-        if not self.root_values or set(self.root_values.values()) - {"ZC", "ZW"}:
-            raise FuturesDataError("root_values must map vendor values only to ZC or ZW")
+        if not self.root_values or set(self.root_values.values()) - {"ZC", "ZW", "CC"}:
+            raise FuturesDataError("root_values must map vendor values only to ZC, ZW, or CC")
 
 
 @dataclass(frozen=True)
@@ -79,6 +79,14 @@ class AuditIssue:
     count: int
     message: str
     examples: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AuditContractSpec:
+    """The subset of exchange mechanics needed for price-data auditing."""
+
+    tick_size_cents: float
+    listed_month_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -247,7 +255,9 @@ def import_contract_export(
     mapping_file = _resolve(mapping_path)
     spec = load_import_spec(mapping_file)
     frame = normalize_export(read_export(input_file), spec)
-    report = audit_contract_panel(frame)
+    report = audit_contract_panel(
+        frame, required_roots=set(spec.root_values.values())
+    )
     timestamp = imported_at or datetime.now(timezone.utc)
     manifest = {
         "schema_version": 1,
@@ -289,11 +299,20 @@ def _examples(frame: pd.DataFrame, mask: pd.Series, columns: list[str]) -> tuple
 
 def audit_contract_panel(
     frame: pd.DataFrame,
-    specs: Mapping[str, ContractSpec] | None = None,
+    specs: Mapping[str, ContractSpec | AuditContractSpec] | None = None,
+    *,
+    required_roots: set[str] | None = None,
 ) -> AuditReport:
     """Report data defects without failing at the first one."""
 
-    specs = specs or load_execution_config().contracts
+    if specs is None:
+        specs = dict(load_execution_config().contracts)
+        # Cocoa is not part of the corn/wheat spread executor, but its exchange
+        # mechanics are sufficient for unit, tick, and contract-code auditing.
+        specs["CC"] = AuditContractSpec(
+            tick_size_cents=100.0,
+            listed_month_codes=("H", "K", "N", "U", "Z"),
+        )
     issues: list[AuditIssue] = []
     required = {
         "date", "root", "contract", "last_trade_date", *CANONICAL_PRICE_FIELDS,
@@ -337,13 +356,12 @@ def audit_contract_panel(
             "ERROR", "UNKNOWN_ROOTS", len(unknown_roots),
             f"unsupported roots: {', '.join(unknown_roots)}", tuple(unknown_roots),
         ))
-    missing_roots = sorted(set(specs) - set(roots))
+    missing_roots = sorted((required_roots or set()) - set(roots))
     if missing_roots:
         issues.append(AuditIssue(
             "ERROR", "MISSING_ROOTS", len(missing_roots),
             f"required roots absent: {', '.join(missing_roots)}", tuple(missing_roots),
         ))
-
     for column in CANONICAL_PRICE_FIELDS:
         bad = clean[column].isna() | (clean[column] <= 0)
         if bad.any():
@@ -479,7 +497,7 @@ def audit_contract_panel(
     contracts = clean["contract"].nunique(dropna=True)
     dates = clean["date"].dropna()
     root_dates = {
-        root: set(clean.loc[clean["root"] == root, "date"].dropna()) for root in specs
+        root: set(clean.loc[clean["root"] == root, "date"].dropna()) for root in roots
     }
     common = set.intersection(*root_dates.values()) if root_dates and all(root_dates.values()) else set()
     rows_by_root = {

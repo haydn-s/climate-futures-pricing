@@ -132,6 +132,26 @@ def test_unmapped_vendor_root_is_refused() -> None:
         normalize_export(frame, import_spec())
 
 
+def test_cocoa_only_panel_is_audited_without_requiring_grain_roots() -> None:
+    frame = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-02", "2026-01-05"]),
+        "root": ["CC", "CC"],
+        "contract": ["CCH26", "CCH26"],
+        "last_trade_date": pd.to_datetime(["2026-03-13", "2026-03-13"]),
+        "open_cents": [500_000.0, 501_000.0],
+        "high_cents": [501_000.0, 502_000.0],
+        "low_cents": [499_000.0, 500_000.0],
+        "settlement_cents": [500_000.0, 501_000.0],
+        "volume": [1000, 1100],
+        "open_interest": [5000, 4900],
+    })
+    report = audit_contract_panel(frame)
+    assert report.pricing_valid
+    assert report.roots == ("CC",)
+    assert not any(issue.code in {"UNKNOWN_ROOTS", "MISSING_ROOTS"} for issue in report.issues)
+    assert any(issue.code == "MISSING_MARGIN" for issue in report.issues)
+
+
 def test_import_manifest_hashes_inputs_and_preserves_license_note(tmp_path: Path) -> None:
     source = tmp_path / "contracts.csv"
     vendor_frame().to_csv(source, index=False)
@@ -165,6 +185,16 @@ def test_audit_distinguishes_valid_prices_from_missing_margin() -> None:
     assert report.rows_by_root == {"ZC": 3, "ZW": 3}
     assert report.years_by_root == {"ZC": (2026,), "ZW": (2026,)}
     assert report.delivery_month_codes_by_root == {"ZC": ("H",), "ZW": ("H",)}
+
+
+def test_import_audit_requires_every_root_declared_by_mapping(tmp_path: Path) -> None:
+    source = tmp_path / "contracts.csv"
+    vendor_frame().loc[lambda rows: rows["commodity"] == "C"].to_csv(source, index=False)
+    imported = import_contract_export(source, write_mapping(tmp_path / "mapping.yaml"))
+    assert not imported.manifest["audit"]["pricing_valid"]
+    assert any(
+        issue["code"] == "MISSING_ROOTS" for issue in imported.manifest["audit"]["issues"]
+    )
 
 
 def test_audit_detects_duplicate_and_impossible_ohlc() -> None:

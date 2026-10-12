@@ -1,0 +1,50 @@
+schema_version: 1
+protocol_id: cocoa-model-baseline-v1
+locked_on: 2026-10-12
+
+purpose: >-
+  Test whether point-in-time West African weather adds a repeatable, tradable
+  signal for ICE-US cocoa beyond cocoa's own price and liquidity history.
+
+information_boundary:
+  development_end_year: 2023
+  consumed_diagnostic_start_year: 2024
+  consumed_diagnostic_used_for_selection: false
+
+decision_cadence:
+  frequency: final ICE session of each calendar week
+  outer_splits: 5
+  outer_embargo_rows: 1
+  inner_validation_fraction: 0.20
+  inner_embargo_rows: 1
+
+execution:
+  source: dated LSEG ICE-US CC contracts
+  roll_business_days: 10
+  entry: next same-contract session open
+  exit: five sessions after entry at the same-contract open
+  commission_usd_per_contract_side: 2.50
+  slippage_ticks_per_contract_side: 1.0
+  tick_value_usd: 10.0
+  cost_selection: median estimated round-trip cost rate in development only
+  margin_constraint: unavailable_in_v1
+
+feature_sets:
+  - weather_only
+  - market_only
+  - weather_market
+
+models:
+  - ridge
+  - logistic
+  - boosting
+
+interpretation:
+  primary_comparison: weather_market versus market_only on development folds
+  consumed_2024_plus_role: diagnosis_only
+  promotion_allowed: false
+  blockers_before_promotion:
+    - fixed-specification rerun with bootstrap and circular-shift uncertainty
+    - authoritative dated ICE margin history
+    - capital-constrained execution replay
+    - prospective observations untouched by model development

@@ -1,13 +1,13 @@
-"""Download individual CBOT corn and wheat contracts through LSEG Workspace.
+"""Download individual futures contracts through LSEG Workspace.
 
 The connector uses the signed-in desktop session.  It neither accepts nor
 stores credentials, and ``lseg-data`` remains an optional dependency so the
 public-data pipeline and its tests do not require licensed software.
 
 LSEG reuses live futures RICs.  Expired contracts therefore need the archived
-RIC form (for example ``CZ24^2``), while the canonical table uses stable CME-
-style identifiers such as ``ZCZ24``.  Keeping both identifiers in the vendor
-export makes that translation auditable.
+RIC form (for example ``CZ24^2`` or ``CCZ4^2``), while the canonical table uses
+stable identifiers such as ``ZCZ24`` or ``CCZ24``.  Keeping both identifiers in
+the vendor export makes that translation auditable.
 """
 
 from __future__ import annotations
@@ -33,7 +33,32 @@ LICENSE_NOTE = (
 LISTED_MONTHS = ("H", "K", "N", "U", "Z")
 TWO_DIGIT_RIC_START_YEAR = 2024
 MONTH_NUMBERS = {"H": 3, "K": 5, "N": 7, "U": 9, "Z": 12}
-RIC_ROOTS = {"ZC": "C", "ZW": "W"}
+
+
+@dataclass(frozen=True)
+class WorkspaceProduct:
+    """LSEG symbology and quote units for one canonical futures root."""
+
+    ric_root: str
+    month_codes: tuple[str, ...]
+    two_digit_year_from: int | None
+    price_multiplier_to_cents: float
+    quote_description: str
+
+
+PRODUCTS = {
+    "ZC": WorkspaceProduct("C", LISTED_MONTHS, TWO_DIGIT_RIC_START_YEAR, 1.0,
+                           "cents per bushel"),
+    "ZW": WorkspaceProduct("W", LISTED_MONTHS, TWO_DIGIT_RIC_START_YEAR, 1.0,
+                           "cents per bushel"),
+    # Verified against the signed-in Workspace chain 0#CC: on 2026-10-12.
+    # The discovery chain exposes constituents with a leading slash, but the
+    # historical endpoint accepts the same RIC only without it. ICE-US cocoa
+    # retains one-digit years for both live and archived contracts. Prices are
+    # USD per metric tonne.
+    "CC": WorkspaceProduct("CC", LISTED_MONTHS, None, 100.0,
+                           "US dollars per metric tonne"),
+}
 HISTORY_FIELDS = (
     "OPEN_PRC",
     "HIGH_1",
@@ -116,22 +141,21 @@ def _is_expired(year: int, month_code: str, as_of: date) -> bool:
 
 
 def lseg_ric(root: str, month_code: str, year: int, *, as_of: date) -> str:
-    """Return LSEG's live or archived RIC for one standard grain contract."""
+    """Return LSEG's live or archived RIC for one supported contract."""
 
-    if root not in RIC_ROOTS:
+    if root not in PRODUCTS:
         raise WorkspaceFuturesError(f"unsupported futures root {root!r}")
-    if month_code not in LISTED_MONTHS:
+    product = PRODUCTS[root]
+    if month_code not in product.month_codes:
         raise WorkspaceFuturesError(f"unsupported delivery month {month_code!r}")
     if not 2000 <= year <= 2099:
         raise WorkspaceFuturesError("delivery years must be between 2000 and 2099")
     # LSEG's CBOT RIC convention changed for the 2024 delivery year. Archived
     # 2020-2023 contracts are CH0^2..CH3^2, while 2024 is CH24^2.
-    year_part = (
-        f"{year % 100:02d}"
-        if year >= TWO_DIGIT_RIC_START_YEAR
-        else str(year % 10)
-    )
-    base = f"{RIC_ROOTS[root]}{month_code}{year_part}"
+    year_part = str(year % 10)
+    if product.two_digit_year_from is not None and year >= product.two_digit_year_from:
+        year_part = f"{year % 100:02d}"
+    base = f"{product.ric_root}{month_code}{year_part}"
     if _is_expired(year, month_code, as_of):
         return f"{base}^{_archive_decade(year)}"
     return base
@@ -147,13 +171,19 @@ def contract_requests(
     selected_roots = tuple(dict.fromkeys(str(root).upper() for root in roots))
     if not years:
         raise WorkspaceFuturesError("at least one delivery year is required")
-    unknown = sorted(set(selected_roots) - set(RIC_ROOTS))
+    unknown = sorted(set(selected_roots) - set(PRODUCTS))
     if unknown:
         raise WorkspaceFuturesError(f"unsupported futures roots: {', '.join(unknown)}")
+    multipliers = {PRODUCTS[root].price_multiplier_to_cents for root in selected_roots}
+    if len(multipliers) != 1:
+        raise WorkspaceFuturesError(
+            "one export cannot mix products with different quote units; "
+            "download CC separately from ZC/ZW"
+        )
     requests = []
     for year in years:
         for root in selected_roots:
-            for month_code in LISTED_MONTHS:
+            for month_code in PRODUCTS[root].month_codes:
                 requests.append(ContractRequest(
                     root=root,
                     delivery_year=year,
@@ -344,7 +374,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _mapping(query_reference: str) -> Mapping[str, Any]:
+def _mapping(query_reference: str, roots: Iterable[str]) -> Mapping[str, Any]:
+    selected = tuple(dict.fromkeys(str(root).upper() for root in roots))
+    multipliers = {PRODUCTS[root].price_multiplier_to_cents for root in selected}
+    if len(multipliers) != 1:
+        raise WorkspaceFuturesError(
+            "one export cannot mix products with different quote units; "
+            "download CC separately from ZC/ZW"
+        )
     return {
         "schema_version": 1,
         "source_name": SOURCE_NAME,
@@ -363,8 +400,8 @@ def _mapping(query_reference: str) -> Mapping[str, Any]:
             "volume": "volume",
             "open_interest": "open_interest",
         },
-        "root_values": {"ZC": "ZC", "ZW": "ZW"},
-        "price_multiplier_to_cents": 1.0,
+        "root_values": {root: root for root in selected},
+        "price_multiplier_to_cents": multipliers.pop(),
     }
 
 
@@ -383,7 +420,7 @@ def save_workspace_download(
     mapping_path = directory / f"{stem}.mapping.yaml"
     download.frame.to_csv(export_path, index=False, date_format="%Y-%m-%d")
 
-    mapping = _mapping(manifest_path.name)
+    mapping = _mapping(manifest_path.name, download.roots)
     mapping_path.write_text(
         yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8"
     )
@@ -399,12 +436,20 @@ def save_workspace_download(
             "end": download.end.isoformat(),
             "delivery_years": list(download.delivery_years),
             "roots": list(download.roots),
-            "month_codes": list(LISTED_MONTHS),
+            "month_codes_by_root": {
+                root: list(PRODUCTS[root].month_codes) for root in download.roots
+            },
             "interval": "1D",
             "fields": list(HISTORY_FIELDS),
         },
         "transformations": {
-            "prices": "LSEG values retained in cents per bushel",
+            "prices": {
+                root: (
+                    f"LSEG values retained in {PRODUCTS[root].quote_description}; "
+                    f"import multiplier to cents={PRODUCTS[root].price_multiplier_to_cents:g}"
+                )
+                for root in download.roots
+            },
             "expired_rics": "resolved with LSEG archive-decade suffixes",
             "dropped_rows": (
                 "rows missing date, expiry, or any OHLC field, plus rows whose "

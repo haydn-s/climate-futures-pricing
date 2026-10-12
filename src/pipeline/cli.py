@@ -207,7 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     workspace = commands.add_parser(
         "futures-workspace-download", parents=[_global_options()],
-        help="download licensed ZC/ZW contract history through signed-in Workspace")
+        help="download licensed ZC/ZW/CC contract history through signed-in Workspace")
     workspace.add_argument(
         "--start", type=date.fromisoformat, default=date(2011, 10, 1),
         help="first trading date (YYYY-MM-DD; default: 2011-10-01)")
@@ -218,8 +218,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--delivery-years", nargs="+", required=True,
         help="delivery years: 2024, 2012-2026, or a mix")
     workspace.add_argument(
-        "--roots", nargs="+", default=["ZC", "ZW"], choices=["ZC", "ZW"],
-        help="licensed product roots to download (default: ZC ZW)")
+        "--roots", nargs="+", default=["ZC", "ZW"], choices=["ZC", "ZW", "CC"],
+        help="licensed product roots to download; CC must be a separate export")
     workspace.add_argument(
         "--out-dir", default=None,
         help="output directory (default: <data-root>/raw/lseg_workspace)")
