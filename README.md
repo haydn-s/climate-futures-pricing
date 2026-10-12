@@ -39,7 +39,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
-| Can market-neutral targets and nonlinear models turn the null into a signal? | One primary and one marginal configuration clear the research gate, but the primary signal is not stable under the first dated-contract execution replay. | Nested walk-forward selection, a fixed 2024–2026 holdout, and a post-freeze LSEG replay. |
+| Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
@@ -105,7 +105,7 @@ PYTHONPATH=src python analysis/forecast_verification.py
 PYTHONPATH=src python analysis/forecast_peek_sweep.py
 ```
 
-### 4. Market-neutral modeling produces a paper-trading candidate
+### 4. Market-neutral modeling produces a candidate that fails final validation
 
 The signal benchmark tests three five-day targets: raw corn returns, corn minus
 wheat, and corn minus a trailing-beta soybean/wheat basket. It crosses those with
@@ -113,8 +113,9 @@ three feature sets—crop-stage weather, added price regimes, and added CPC
 forecasts—and Ridge, logistic, and shallow gradient-boosting models.
 
 Hyperparameters and buy/sell/hold thresholds are selected inside each expanding
-training block. Outer folds move forward with an embargo, 2024–2026 remains a
-fixed final holdout, and every trade pays five basis points per leg. Market
+training block. Outer folds move forward with an embargo, the original study
+reserved 2024–2026 as its final holdout, and every trade pays five basis points
+per leg. Market
 features exclude the close used to enter the target return; CPC inputs are
 delayed one session because the archive records release dates but not times, and
 forecast-enhanced specifications begin when CPC coverage starts in 2012.
@@ -130,9 +131,10 @@ with Ridge also passes, but its 1.0% holdout return and 0.14 Sharpe make it a
 marginal result rather than the preferred candidate.
 
 Every regression model still has negative out-of-sample R², and the final
-holdout has now been reviewed. The supported deliverable is therefore a
+holdout has now been reviewed. At that stage, the supported deliverable was a
 **candidate for prospective paper trading**, not evidence sufficient for live
-capital.
+capital. The later dated-contract studies below reject promotion while retaining
+the frozen model only for prospective falsification.
 
 Detailed assumptions and every comparison are in
 [`analysis/ml_signal_baseline_report.md`](analysis/ml_signal_baseline_report.md);
@@ -228,6 +230,30 @@ Full attribution, cost capacity, aggregate direction/confidence/season/roll
 strata, and uncertainty are in
 [`analysis/lseg_execution_attribution_report.md`](analysis/lseg_execution_attribution_report.md).
 Run: `PYTHONPATH=src python analysis/lseg_execution_attribution.py`
+
+The final bounded modeling round learns dated-contract next-open outcomes
+directly and tests corn-minus-wheat, corn-only, and wheat-only targets. Ten
+predeclared elastic-net, shallow-boosting, and cost-aware three-way models are
+compared with seven simple rules over identical embargoed forward folds. Model
+selection ends in 2023; the already consumed 2024–2026 history is diagnostic
+only. Calendar-year bootstraps, within-year circular-shift nulls, doubled-cost
+stress, direction/year/regime strata, and an explicit acceptance gate are all
+reported.
+
+No candidate clears the complete gate. The spread models are approximately flat
+to negative after execution, and the best corn model is materially weaker than
+a simple momentum rule. A wheat elastic net is the strongest diagnostic result
+(+52.2% arithmetic development net on average-leg notional, Sharpe 0.70,
+circular-shift p=2.9%), but it is positive in only two of four forward folds,
+so it is not promoted. Its feature set is still the corn-centered public panel,
+so this is a control target rather than a wheat-specific climate model. The
+supported final retrospective conclusion is **NO ROBUST EDGE DEMONSTRATED**.
+
+The locked protocol and results are in
+[`docs/corn_wheat_final_validation_protocol.md`](docs/corn_wheat_final_validation_protocol.md)
+and [`analysis/corn_wheat_final_validation_report.md`](analysis/corn_wheat_final_validation_report.md).
+
+Run: `PYTHONPATH=src python analysis/corn_wheat_final_validation.py`
 
 The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
 code to the expiry-ordered LSEG contract strip, and creates an ignored,

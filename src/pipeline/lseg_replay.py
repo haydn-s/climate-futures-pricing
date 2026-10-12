@@ -306,6 +306,26 @@ def replay_frozen_signals(
             cost_usd = commission_usd + slippage_usd
             denominator = size.average_leg_notional_usd
             unsigned_return = unsigned_pnl / denominator
+            corn_unsigned_pnl = _leg_pnl(
+                float(entries["ZC"][assumptions.fill_price_column]),
+                float(exits["ZC"][assumptions.fill_price_column]),
+                quantity=quantities["ZC"], side=1,
+                spec=config.contracts["ZC"],
+            )
+            wheat_unsigned_pnl = _leg_pnl(
+                float(entries["ZW"][assumptions.fill_price_column]),
+                float(exits["ZW"][assumptions.fill_price_column]),
+                quantity=quantities["ZW"], side=1,
+                spec=config.contracts["ZW"],
+            )
+            corn_cost_usd = 2 * quantities["ZC"] * (
+                commission
+                + slippage_ticks * config.contracts["ZC"].tick_value_usd
+            )
+            wheat_cost_usd = 2 * quantities["ZW"] * (
+                commission
+                + slippage_ticks * config.contracts["ZW"].tick_value_usd
+            )
             signal = int(decision.signal)
             overlap = bool(
                 signal != 0
@@ -352,6 +372,25 @@ def replay_frozen_signals(
                 "average_leg_notional_usd": denominator,
                 "notional_imbalance_fraction": size.imbalance_fraction,
                 "execution_unsigned_gross_return": unsigned_return,
+                "execution_unsigned_corn_return": (
+                    corn_unsigned_pnl / size.corn_notional_usd
+                ),
+                "execution_unsigned_wheat_return": (
+                    wheat_unsigned_pnl / size.wheat_notional_usd
+                ),
+                # Potential cost fields do not depend on the model action.  They
+                # let a validation target learn the actual next-open contract
+                # economics even when the dummy action used to construct the
+                # outcome panel is HOLD.
+                "potential_commission_usd": commission_usd,
+                "potential_slippage_usd": slippage_usd,
+                "potential_cost_return": cost_usd / denominator,
+                "potential_corn_cost_return": (
+                    corn_cost_usd / size.corn_notional_usd
+                ),
+                "potential_wheat_cost_return": (
+                    wheat_cost_usd / size.wheat_notional_usd
+                ),
                 "execution_gross_pnl_usd": execution_signal * unsigned_pnl,
                 "execution_commission_usd": abs(execution_signal) * commission_usd,
                 "execution_slippage_usd": abs(execution_signal) * slippage_usd,

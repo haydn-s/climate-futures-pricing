@@ -135,3 +135,17 @@ The enforced workflow is documented in
 It writes an immutable same-day decision record before entry data exist, then
 appends a separately hash-linked outcome after the five-session horizon. Late or
 backfilled registrations are rejected rather than relabeled as prospective.
+
+The final execution-aligned development round was locked and run on October 12,
+2026. It compared ten finite model specifications with seven simple rules using
+actual next-open LSEG outcomes. No candidate passed every development-only gate,
+so no v2 was promoted. The strongest diagnostic candidate was a wheat elastic
+net, but it was positive in only two of four forward folds. V1 remains frozen
+only so future observations can falsify or reinforce the negative retrospective
+conclusion; it has not regained deployment status.
+
+The campaign is recorded in [`prospective_campaign.json`](prospective_campaign.json).
+Its first registration is an ineligible `OPERATIONAL_HOLD`: the latest archived
+decision was already 18 days old. This verifies that the ledger refuses to call
+a late decision prospective. The first evidentiary observation must be a future
+same-day registration.

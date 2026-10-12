@@ -5,6 +5,20 @@ effectiveness evidence must begin with a decision saved before the entry and
 outcome exist. The paper-trading ledger enforces that boundary and never submits
 an order.
 
+## Active campaign
+
+The corn/wheat falsification campaign began October 12, 2026. No final-round v2
+candidate cleared the locked development gate, so the workflow continues to
+observe the unchanged `corn-wheat-all-public-boosting-v1` specification. This is
+an observation-only test, not a renewed claim that v1 is effective.
+
+The first campaign record is deliberately not evidence: the latest available
+decision was September 24 and was stale when registered. The ledger classified
+it as `OPERATIONAL_HOLD` with `eligible_for_prospective_evidence=false`. The
+campaign therefore starts with one operational audit record and zero eligible
+decisions. Its frozen thresholds are in the model's
+[`prospective_campaign.json`](../models/corn-wheat-all-public-boosting-v1/prospective_campaign.json).
+
 ## Evidence model
 
 Each observation has two immutable JSON records beneath ignored

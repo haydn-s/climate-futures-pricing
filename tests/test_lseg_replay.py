@@ -82,6 +82,11 @@ def test_replay_separates_close_target_from_next_open_execution() -> None:
     assert row["exit_date"] == pd.Timestamp("2026-01-06")
     assert row["execution_gross_return"] > 0
     assert row["execution_net_return"] < row["execution_gross_return"]
+    assert row["execution_unsigned_corn_return"] == pytest.approx(420 / 410 - 1)
+    assert row["execution_unsigned_wheat_return"] == pytest.approx(480 / 490 - 1)
+    assert row["potential_cost_return"] > 0
+    assert row["potential_corn_cost_return"] > 0
+    assert row["potential_wheat_cost_return"] > 0
     assert row["execution_status"] == "EXECUTED"
     assert row["execution_signal"] == 1
     assert row["corn_nearest_contract"] == "ZCH26"
@@ -103,6 +108,7 @@ def test_hold_still_gets_an_unsigned_outcome_but_pays_no_cost() -> None:
     assert row["execution_gross_return"] == 0
     assert row["execution_net_return"] == 0
     assert row["execution_cost_return"] == 0
+    assert row["potential_cost_return"] > 0
 
 
 def test_replay_suppresses_signals_that_overlap_an_open_trade() -> None:

@@ -1,0 +1,67 @@
+name,sample,dimension,bucket,observations,trades,hit_rate,total_net,mean_net_per_trade
+wheat_public_elastic_net,development,year,2015,2,1,1.00000000,0.04870097,0.04870097
+wheat_public_elastic_net,development,year,2016,26,13,0.61538462,0.12823996,0.00986461
+wheat_public_elastic_net,development,year,2017,26,13,0.46153846,-0.04108053,-0.00316004
+wheat_public_elastic_net,development,year,2018,27,6,0.66666667,0.05514629,0.00919105
+wheat_public_elastic_net,development,year,2019,27,6,0.33333333,-0.06574418,-0.01095736
+wheat_public_elastic_net,development,year,2020,27,2,1.00000000,0.05863852,0.02931926
+wheat_public_elastic_net,development,year,2021,27,5,0.20000000,-0.09524218,-0.01904844
+wheat_public_elastic_net,development,year,2022,25,13,0.69230769,0.15035394,0.01156569
+wheat_public_elastic_net,development,year,2023,25,13,0.61538462,0.28264051,0.02174158
+wheat_public_elastic_net,development,direction,BUY,36,36,0.55555556,0.14996099,0.00416558
+wheat_public_elastic_net,development,direction,HOLD,140,0,,0.00000000,
+wheat_public_elastic_net,development,direction,SELL,36,36,0.58333333,0.37169230,0.01032479
+wheat_public_elastic_net,development,season,late Aug-Oct,98,30,0.43333333,-0.16088486,-0.00536283
+wheat_public_elastic_net,development,season,early Apr-May,59,19,0.63157895,0.23115467,0.01216604
+wheat_public_elastic_net,development,season,mid Jun-Jul,55,23,0.69565217,0.45138348,0.01962537
+wheat_public_elastic_net,development,market_regime,negative momentum,102,37,0.59459459,0.28372409,0.00766822
+wheat_public_elastic_net,development,market_regime,positive momentum,109,35,0.54285714,0.23792920,0.00679798
+wheat_public_elastic_net,development,market_regime,flat,1,0,,0.00000000,
+wheat_public_elastic_net,development,roll_selection,nearest contracts,150,51,0.58823529,0.19402936,0.00380450
+wheat_public_elastic_net,development,roll_selection,rolled beyond nearest,62,21,0.52380952,0.32762393,0.01560114
+wheat_public_elastic_net,consumed_holdout,year,2024,27,9,0.55555556,-0.02249172,-0.00249908
+wheat_public_elastic_net,consumed_holdout,year,2025,26,6,0.50000000,0.03464878,0.00577480
+wheat_public_elastic_net,consumed_holdout,year,2026,20,4,0.75000000,0.13503269,0.03375817
+wheat_public_elastic_net,consumed_holdout,direction,SELL,10,10,0.60000000,0.10875108,0.01087511
+wheat_public_elastic_net,consumed_holdout,direction,HOLD,54,0,,0.00000000,
+wheat_public_elastic_net,consumed_holdout,direction,BUY,9,9,0.55555556,0.03843867,0.00427096
+wheat_public_elastic_net,consumed_holdout,season,early Apr-May,22,4,0.75000000,0.03442586,0.00860647
+wheat_public_elastic_net,consumed_holdout,season,mid Jun-Jul,20,7,0.57142857,0.08967666,0.01281095
+wheat_public_elastic_net,consumed_holdout,season,late Aug-Oct,31,8,0.50000000,0.02308722,0.00288590
+wheat_public_elastic_net,consumed_holdout,market_regime,positive momentum,43,12,0.41666667,0.02887417,0.00240618
+wheat_public_elastic_net,consumed_holdout,market_regime,negative momentum,30,7,0.85714286,0.11831557,0.01690222
+wheat_public_elastic_net,consumed_holdout,roll_selection,nearest contracts,52,13,0.53846154,0.07867714,0.00605209
+wheat_public_elastic_net,consumed_holdout,roll_selection,rolled beyond nearest,21,6,0.66666667,0.06851260,0.01141877
+raw_wheat_seasonal_mean,development,year,2015,2,0,,0.00000000,
+raw_wheat_seasonal_mean,development,year,2016,26,12,0.41666667,-0.02581301,-0.00215108
+raw_wheat_seasonal_mean,development,year,2017,26,13,0.61538462,0.12545827,0.00965064
+raw_wheat_seasonal_mean,development,year,2018,27,14,0.50000000,-0.10049002,-0.00717786
+raw_wheat_seasonal_mean,development,year,2019,27,15,0.66666667,0.14821666,0.00988111
+raw_wheat_seasonal_mean,development,year,2020,27,11,0.54545455,-0.06461620,-0.00587420
+raw_wheat_seasonal_mean,development,year,2021,27,10,0.70000000,0.03616548,0.00361655
+raw_wheat_seasonal_mean,development,year,2022,25,14,0.64285714,0.29752983,0.02125213
+raw_wheat_seasonal_mean,development,year,2023,25,14,0.57142857,0.06834642,0.00488189
+raw_wheat_seasonal_mean,development,direction,HOLD,109,0,,0.00000000,
+raw_wheat_seasonal_mean,development,direction,SELL,54,54,0.53703704,0.34645769,0.00641588
+raw_wheat_seasonal_mean,development,direction,BUY,49,49,0.63265306,0.13833975,0.00282326
+raw_wheat_seasonal_mean,development,season,late Aug-Oct,98,46,0.65217391,0.56936005,0.01237739
+raw_wheat_seasonal_mean,development,season,early Apr-May,59,24,0.54166667,0.05493923,0.00228913
+raw_wheat_seasonal_mean,development,season,mid Jun-Jul,55,33,0.51515152,-0.13950184,-0.00422733
+raw_wheat_seasonal_mean,development,market_regime,negative momentum,102,49,0.53061224,-0.11076886,-0.00226059
+raw_wheat_seasonal_mean,development,market_regime,positive momentum,109,54,0.62962963,0.59556630,0.01102901
+raw_wheat_seasonal_mean,development,market_regime,flat,1,0,,0.00000000,
+raw_wheat_seasonal_mean,development,roll_selection,nearest contracts,150,71,0.59154930,0.47992134,0.00675946
+raw_wheat_seasonal_mean,development,roll_selection,rolled beyond nearest,62,32,0.56250000,0.00487609,0.00015238
+raw_wheat_seasonal_mean,consumed_holdout,year,2024,27,14,0.28571429,-0.07649511,-0.00546394
+raw_wheat_seasonal_mean,consumed_holdout,year,2025,26,15,0.40000000,-0.15807492,-0.01053833
+raw_wheat_seasonal_mean,consumed_holdout,year,2026,20,12,0.41666667,-0.20833650,-0.01736138
+raw_wheat_seasonal_mean,consumed_holdout,direction,BUY,22,22,0.36363636,-0.21113917,-0.00959724
+raw_wheat_seasonal_mean,consumed_holdout,direction,HOLD,32,0,,0.00000000,
+raw_wheat_seasonal_mean,consumed_holdout,direction,SELL,19,19,0.36842105,-0.23176736,-0.01219828
+raw_wheat_seasonal_mean,consumed_holdout,season,early Apr-May,22,12,0.33333333,-0.11264631,-0.00938719
+raw_wheat_seasonal_mean,consumed_holdout,season,mid Jun-Jul,20,13,0.38461538,-0.22357424,-0.01719802
+raw_wheat_seasonal_mean,consumed_holdout,season,late Aug-Oct,31,16,0.37500000,-0.10668598,-0.00666787
+raw_wheat_seasonal_mean,consumed_holdout,market_regime,positive momentum,43,22,0.31818182,-0.36554661,-0.01661575
+raw_wheat_seasonal_mean,consumed_holdout,market_regime,negative momentum,30,19,0.42105263,-0.07735992,-0.00407157
+raw_wheat_seasonal_mean,consumed_holdout,roll_selection,nearest contracts,52,29,0.34482759,-0.19815235,-0.00683284
+raw_wheat_seasonal_mean,consumed_holdout,roll_selection,rolled beyond nearest,21,12,0.41666667,-0.24475418,-0.02039618

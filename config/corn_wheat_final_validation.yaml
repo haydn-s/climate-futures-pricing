@@ -1,0 +1,80 @@
+schema_version: 1
+protocol_id: corn-wheat-final-validation-v1
+locked_on: 2026-10-12
+
+purpose: >-
+  Give the corn/wheat modeling avenue one bounded, execution-aligned validation
+  round before either advancing a candidate or reporting that no robust tradable
+  edge was demonstrated.
+
+information_boundary:
+  development_end_year: 2023
+  consumed_diagnostic_start_year: 2024
+  consumed_diagnostic_used_for_selection: false
+  prospective_start_date: 2026-10-12
+
+decision_cadence:
+  horizon_trading_sessions: 5
+  publication_schedule: US Drought Monitor publication weeks
+  growing_months: [4, 5, 6, 7, 8, 9, 10]
+  outer_splits: 5
+  outer_embargo_rows: 1
+  inner_validation_fraction: 0.20
+  inner_embargo_rows: 1
+
+execution:
+  config: config/futures_execution.yaml
+  source: dated LSEG ZC and ZW contracts
+  entry: next shared session open
+  holding_sessions_after_entry: 5
+  overlap: prohibited
+  cost_sensitivity_multipliers: [1.0, 2.0]
+
+baselines:
+  - no_trade
+  - long_only
+  - short_only
+  - trailing_mean
+  - seasonal_mean
+  - momentum
+  - mean_reversion
+
+candidates:
+  - spread_weather_elastic_net
+  - spread_public_elastic_net
+  - spread_public_boosting
+  - spread_public_three_way
+  - corn_public_elastic_net
+  - corn_public_boosting
+  - corn_public_three_way
+  - wheat_public_elastic_net
+  - wheat_public_boosting
+  - wheat_public_three_way
+
+acceptance_gate:
+  minimum_development_trades: 30
+  minimum_development_sharpe: 0.50
+  minimum_positive_fold_fraction: 0.60
+  minimum_positive_year_fraction: 0.60
+  must_beat_best_same_target_baseline_net: true
+  must_beat_best_same_target_baseline_sharpe: true
+  must_remain_positive_at_double_cost: true
+  minimum_year_bootstrap_probability_positive: 0.80
+  maximum_circular_shift_null_p_value: 0.10
+  maximum_development_drawdown: 0.25
+  consumed_diagnostic_metrics_in_gate: false
+
+uncertainty:
+  random_seed: 590
+  draws: 2000
+  bootstrap_unit: calendar year
+  null: within-year circular shift of out-of-sample actions
+
+prospective_campaign:
+  orders_authorized: false
+  tuning_during_campaign: prohibited
+  minimum_eligible_decisions: 30
+  minimum_complete_growing_seasons: 1
+  stop_for_operational_error: true
+  performance_stop_or_tuning: prohibited before minimum evidence
+
