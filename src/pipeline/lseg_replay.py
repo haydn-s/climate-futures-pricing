@@ -91,7 +91,8 @@ def size_price_only_spread(
     )
 
 
-def _prepare_contracts(frame: pd.DataFrame) -> pd.DataFrame:
+def prepare_contracts(frame: pd.DataFrame) -> pd.DataFrame:
+    """Normalize the price fields required by a margin-free LSEG replay."""
     missing = sorted(REQUIRED_CONTRACT_COLUMNS - set(frame.columns))
     if missing:
         raise ReplayError(f"contract panel is missing: {', '.join(missing)}")
@@ -206,7 +207,7 @@ def replay_frozen_signals(
     if roll_days < 0 or commission < 0 or slippage_ticks < 0:
         raise ReplayError("roll, commission, and slippage assumptions cannot be negative")
 
-    panel = _prepare_contracts(contracts)
+    panel = prepare_contracts(contracts)
     decisions = _prepare_predictions(predictions)
     root_dates = {
         root: set(panel.loc[panel["root"] == root, "date"])
@@ -276,6 +277,12 @@ def replay_frozen_signals(
                 max_contracts_per_leg=assumptions.max_contracts_per_leg,
             )
             quantities = {"ZC": size.corn_contracts, "ZW": size.wheat_contracts}
+            nearest = {
+                root: panel[
+                    (panel["date"] == entry_date) & (panel["root"] == root)
+                ].sort_values(["last_trade_date", "contract"]).iloc[0]
+                for root in ("ZC", "ZW")
+            }
             unsigned_pnl = sum([
                 _leg_pnl(
                     float(entries["ZC"][assumptions.fill_price_column]),
@@ -320,6 +327,20 @@ def replay_frozen_signals(
                 "exit_date": exit_date,
                 "corn_contract": entries["ZC"]["contract"],
                 "wheat_contract": entries["ZW"]["contract"],
+                "corn_nearest_contract": nearest["ZC"]["contract"],
+                "wheat_nearest_contract": nearest["ZW"]["contract"],
+                "corn_rolled_forward": (
+                    entries["ZC"]["contract"] != nearest["ZC"]["contract"]
+                ),
+                "wheat_rolled_forward": (
+                    entries["ZW"]["contract"] != nearest["ZW"]["contract"]
+                ),
+                "corn_business_days_to_last_trade_at_exit": int(np.busday_count(
+                    exit_date.date(), entries["ZC"]["last_trade_date"].date()
+                )),
+                "wheat_business_days_to_last_trade_at_exit": int(np.busday_count(
+                    exit_date.date(), entries["ZW"]["last_trade_date"].date()
+                )),
                 "corn_contracts": size.corn_contracts,
                 "wheat_contracts": size.wheat_contracts,
                 "corn_entry_cents": float(entries["ZC"][assumptions.fill_price_column]),
@@ -345,6 +366,11 @@ def replay_frozen_signals(
             if execution_signal != 0:
                 previous_trade_exit = exit_date
         except (ExecutionError, ReplayError, IndexError) as exc:
-            row.update({"execution_status": "SKIPPED_NO_CONTRACT", "execution_error": str(exc)})
+            row.update({
+                "execution_status": "SKIPPED_NO_CONTRACT",
+                "entry_date": entry_date,
+                "exit_date": exit_date,
+                "execution_error": str(exc),
+            })
         rows.append(row)
     return pd.DataFrame(rows)

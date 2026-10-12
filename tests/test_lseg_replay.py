@@ -84,6 +84,11 @@ def test_replay_separates_close_target_from_next_open_execution() -> None:
     assert row["execution_net_return"] < row["execution_gross_return"]
     assert row["execution_status"] == "EXECUTED"
     assert row["execution_signal"] == 1
+    assert row["corn_nearest_contract"] == "ZCH26"
+    assert row["wheat_nearest_contract"] == "ZWH26"
+    assert not row["corn_rolled_forward"]
+    assert not row["wheat_rolled_forward"]
+    assert row["corn_business_days_to_last_trade_at_exit"] > 0
     assert row["execution_commission_usd"] > 0
     assert row["execution_slippage_usd"] > 0
 
