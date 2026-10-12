@@ -25,10 +25,10 @@ The central result is a useful asymmetry:
   country records obscure, while Brazil's national coffee statistic mixes crop
   types, regions, and a strong biennial-bearing cycle that hides a clearly
   observed 2021 frost.
-- **The first dated-contract cocoa model is not ready to trade.** Point-in-time
-  weather improves development Sharpe relative to cocoa market features alone,
-  but the best combined candidate reaches only 0.48, trails the long-only net
-  baseline, and fails sharply in the already-consumed 2024–2026 diagnostic.
+- **The dated-contract cocoa model does not demonstrate a robust edge.** Its
+  preliminary ranking favored weather plus market features, but exact costs,
+  non-overlapping execution, year-block uncertainty, a circular-shift null, and
+  simple-rule comparisons reject it. Mean reversion performs better.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -45,7 +45,7 @@ repeatable return forecast.
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
-| Does West African weather improve a dated-contract cocoa signal? | Some development-period incremental signal appears, but no robust tradable edge has been established. | 75 LSEG ICE-US contracts, nested forward selection through 2023, explicit costs, and a consumed 2024+ diagnostic. |
+| Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
 analysis.
@@ -352,15 +352,31 @@ return than the long-only development baseline and loses 259.5% in the consumed
 diagnostic, but was not the development winner and cannot be selected after the
 fact. The supported conclusion remains **no robust cocoa edge demonstrated**.
 
+The follow-up freezes that development-selected candidate and applies exact
+row-specific costs plus the same no-overlap policy used in the final grain
+validation. That leaves 109 trades with 20.4% summed development net return,
+Sharpe 0.18, and only 5 of 11 positive years. The calendar-year bootstrap gives
+a 76.0% probability of positive total performance and a 95% interval from
+−33.7% to +77.5%; the within-year circular-shift null has p=0.163. Both miss the
+locked thresholds. A deterministic mean-reversion rule on the identical dates
+earns 62.3% with Sharpe 0.33. The model stays positive under doubled costs, but
+that isolated pass does not overcome its instability or baseline inferiority.
+
+The consumed 2024+ diagnostic remains negative after exact execution treatment:
+−88.5% summed net return with Sharpe −0.71. It does not enter the gate.
+
 Run the baseline after importing the ignored licensed contract panel:
 
 ```bash
 PYTHONPATH=src python analysis/cocoa_model_baseline.py
+PYTHONPATH=src python analysis/cocoa_fixed_validation.py
 ```
 
 See [`analysis/cocoa_model_baseline_report.md`](analysis/cocoa_model_baseline_report.md)
-and the locked protocol in
-[`config/cocoa_model_validation.yaml`](config/cocoa_model_validation.yaml).
+and [`analysis/cocoa_fixed_validation_report.md`](analysis/cocoa_fixed_validation_report.md).
+The two locked protocols are in
+[`config/cocoa_model_validation.yaml`](config/cocoa_model_validation.yaml) and
+[`config/cocoa_fixed_validation.yaml`](config/cocoa_fixed_validation.yaml).
 
 For coffee, NASA POWER identifies July 2021 as the coldest Brazilian winter in
 the 26-year sample, and arabica prices rise sharply into 2022. The national FAO
@@ -547,8 +563,8 @@ reproduce.py             resumable end-to-end workflow
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] Preliminary execution-aligned cocoa weather/market model comparison
-- [ ] Fixed-specification cocoa uncertainty and double-cost validation
-- [ ] Dated ICE cocoa margin history and capital-constrained replay
+- [x] Fixed-specification cocoa uncertainty, null, baseline, and double-cost validation
+- [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
 - [ ] USDA report-day and explicit contract-roll controls
