@@ -1,0 +1,4 @@
+sample,observations,yahoo_lseg_close_correlation,yahoo_lseg_close_median_absolute_difference,yahoo_lseg_close_sign_agreement,signal_close_sign_agreement,yahoo_next_open_correlation,signal_next_open_sign_agreement
+all,285,0.90116468,0.00000000,0.97192982,0.97986577,0.88447333,0.93959732
+development,212,0.88184376,0.00000000,0.96226415,0.97727273,0.86352468,0.93181818
+holdout,73,0.98048912,0.00000000,1.00000000,1.00000000,0.96939027,1.00000000

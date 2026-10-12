@@ -39,7 +39,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
-| Can market-neutral targets and nonlinear models turn the null into a signal? | One primary and one marginal configuration clear the paper-trading gate; neither is ready for live capital. | Nested walk-forward selection, a fixed 2024–2026 holdout, and per-leg costs. |
+| Can market-neutral targets and nonlinear models turn the null into a signal? | One primary and one marginal configuration clear the research gate, but the primary signal is not stable under the first dated-contract execution replay. | Nested walk-forward selection, a fixed 2024–2026 holdout, and a post-freeze LSEG replay. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
@@ -138,8 +138,79 @@ Detailed assumptions and every comparison are in
 [`analysis/ml_signal_baseline_report.md`](analysis/ml_signal_baseline_report.md);
 machine-readable results are in
 [`analysis/ml_signal_baseline_results.csv`](analysis/ml_signal_baseline_results.csv).
+The frozen specification, archive hashes, intended use, and limitations are in
+[`models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md`](models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md).
 
 Run: `PYTHONPATH=src python analysis/ml_signal_baseline.py`
+
+The production inference path rebuilds the point-in-time frame, trains only on
+outcomes completed before the selected decision, and emits an auditable
+`BUY`/`SELL`/`HOLD` paper-trading record. It never submits an order. By default,
+the fitted artifact and JSON record are written beneath ignored `data/models/`
+and `data/signals/` directories; use `--dry-run` to inspect without writing.
+
+```bash
+PYTHONPATH=src python -m pipeline signal --dry-run
+PYTHONPATH=src python -m pipeline signal --json
+PYTHONPATH=src python -m pipeline signal --as-of 2026-09-24 --dry-run
+```
+
+On the frozen archive, the latest eligible decision is September 24, 2026. As of
+October 9 the raw model recommendation is `SELL`, but the input is 15 days old,
+so the safe external action is forced to `HOLD` and marked `STALE_INPUTS`.
+
+Contract-realistic execution is now being built separately from the research
+target. The first execution layer selects dated ZC and ZW contracts outside a
+configurable roll window, sizes integer legs for approximate dollar neutrality,
+fills at the next shared session open, charges per-contract commission and
+slippage, enforces dated maintenance margin, and suppresses overlapping
+positions. It intentionally refuses to treat the existing continuous Yahoo
+series as an orderable contract. The required input schema and current boundary
+are documented in [`docs/contract_execution.md`](docs/contract_execution.md).
+The vendor-neutral importer, provenance manifest, automated quality audit, and
+direct LSEG Workspace download sequence are documented in
+[`docs/lseg_extraction_checklist.md`](docs/lseg_extraction_checklist.md).
+
+The licensed connector uses the signed-in local Workspace desktop session; it
+does not require DSWS credentials or store secrets. Install its optional client
+with `python -m pip install -r requirements-lseg.txt`, then inspect a request
+without contacting LSEG:
+
+```bash
+PYTHONPATH=src python -m pipeline futures-workspace-download \
+  --start 2024-01-01 --end 2024-12-31 \
+  --delivery-years 2024 --dry-run
+```
+
+The October 12, 2026 licensed pull retained 73,635 daily observations for all
+150 requested ZC/ZW contracts from October 3, 2011 through October 9, 2026. The
+pricing audit passes. The query manifest records 23,990 rows lacking complete
+OHLC and two rows with impossible open/high/low relationships that were excluded
+from the import export. Reconstructed front-month returns have zero median
+absolute daily-return difference from the existing Yahoo continuous histories;
+correlations are 0.803 for corn and 0.942 for wheat. Execution remains blocked
+only for the full capital-constrained backtest because dated historical
+maintenance margin is not yet present.
+
+A post-freeze replay now tests v1 without retraining or changing its threshold.
+Replacing the Yahoo target with same-date LSEG settlements preserves the market
+relationship: across 285 out-of-sample decisions, target correlation is 0.901
+and sign agreement is 97.2%. The stricter next-open replay tells a more cautious
+story. It suppresses 49 of 149 signals under the frozen no-overlap policy and,
+after $2.50 commission plus one tick of slippage per contract side, returns
+−7.1% with Sharpe −0.12 across 83 development trades. The already-consumed
+holdout remains positive at +7.3% with Sharpe 0.68 across 17 trades, but is too
+small and no longer independent evidence. Zero-cost development returns are
+positive across all three tested roll windows; base and stress costs erase them.
+
+The result supports the integrity of the continuous-series research target but
+does not establish stable executable effectiveness. Full results, the
+predeclared sensitivity grid, data hashes, and interpretation are in
+[`analysis/lseg_signal_replay_report.md`](analysis/lseg_signal_replay_report.md).
+The aggregate tables can be committed; the row-level licensed ledger remains
+ignored under `data/analysis/`.
+
+Run: `PYTHONPATH=src python analysis/lseg_signal_replay.py`
 
 ### 5. Event timing is real but not cleanly attributable
 
@@ -323,6 +394,10 @@ PYTHONPATH=src python -m pipeline check-config
 PYTHONPATH=src python -m pipeline fetch --source usdm --states IA --years 2012
 PYTHONPATH=src python -m pipeline clean --source usdm
 PYTHONPATH=src python -m pipeline features --crop corn --peek 0 --growing-season
+PYTHONPATH=src python -m pipeline signal --dry-run
+PYTHONPATH=src python -m pipeline futures-workspace-download \
+  --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
+PYTHONPATH=src python analysis/lseg_signal_replay.py
 PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
@@ -337,6 +412,7 @@ probing a source.
 config/                  source definitions and crop geography
 src/pipeline/            clients, ingestion, cleaning, storage, features, tests
 analysis/                research scripts and generated comparison reports
+models/                  frozen model cards and versioned baseline metadata
 tests/                   offline unit tests and captured-response fixtures
 tests/fixtures/*/        fixture provenance and upstream traps
 presentation/            proposal deck and its generator
@@ -350,6 +426,9 @@ reproduce.py             resumable end-to-end workflow
 - [x] Corn yield validation with honest trend fitting
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
+- [x] Frozen v1 model card, data hashes, and auditable paper-signal command
+- [x] Licensed LSEG Workspace contract downloader and validated 2011-2026 ZC/ZW panel
+- [x] Frozen-signal LSEG target and next-open execution replay with cost sensitivity
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] One-command current-data reproduction workflow

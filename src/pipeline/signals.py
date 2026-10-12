@@ -107,6 +107,7 @@ def add_market_features(frame: pd.DataFrame) -> pd.DataFrame:
     basket_mom20 = (result["soybeans_mom20"] + result["wheat_mom20"]) / 2.0
     result["corn_rel_mom20"] = result["corn_mom20"] - result["corn_beta_ag126"] * basket_mom20
     result.loc[:, MARKET_FEATURES] = result.loc[:, MARKET_FEATURES].shift(1)
+    result["market_data_through"] = result["date"].shift(1)
     return result
 
 
@@ -147,6 +148,7 @@ def add_targets(frame: pd.DataFrame, horizons: tuple[int, ...]) -> pd.DataFrame:
         result[f"target_raw_corn_{horizon}"] = corn
         result[f"target_corn_wheat_{horizon}"] = corn - wheat
         result[f"target_corn_ag_beta_{horizon}"] = corn - result["corn_beta_ag126"] * basket
+        result[f"target_end_date_{horizon}"] = result["date"].shift(-horizon)
     return result
 
 

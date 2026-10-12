@@ -1,4 +1,4 @@
-"""The pipeline's command line: check-config, fetch, clean, status.
+"""The pipeline command line: ingest, features, signals, and futures execution.
 
     PYTHONPATH=src python -m pipeline check-config
     PYTHONPATH=src python -m pipeline fetch --source nclimgrid --years 2012 --months 4-10
@@ -28,9 +28,11 @@ module knows which URLs it would have fetched.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib
+import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -189,6 +191,74 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", parents=[_global_options()],
                                  help="what is archived, and how current it is")
     status.add_argument("--source", default=None)
+
+    signal = commands.add_parser(
+        "signal", parents=[_global_options()],
+        help="fit the frozen model and emit an auditable paper-trading signal")
+    signal.add_argument(
+        "--as-of", type=date.fromisoformat, default=None,
+        help="latest date the run may use (YYYY-MM-DD; default: current UTC date)")
+    signal.add_argument(
+        "--dry-run", action="store_true",
+        help="print the signal without saving a model artifact or decision record")
+    signal.add_argument(
+        "--json", action="store_true", dest="output_json",
+        help="write the complete machine-readable decision record to stdout")
+
+    workspace = commands.add_parser(
+        "futures-workspace-download", parents=[_global_options()],
+        help="download licensed ZC/ZW contract history through signed-in Workspace")
+    workspace.add_argument(
+        "--start", type=date.fromisoformat, default=date(2011, 10, 1),
+        help="first trading date (YYYY-MM-DD; default: 2011-10-01)")
+    workspace.add_argument(
+        "--end", type=date.fromisoformat, default=None,
+        help="last trading date (YYYY-MM-DD; default: current UTC date)")
+    workspace.add_argument(
+        "--delivery-years", nargs="+", required=True,
+        help="delivery years: 2024, 2012-2026, or a mix")
+    workspace.add_argument(
+        "--roots", nargs="+", default=["ZC", "ZW"], choices=["ZC", "ZW"],
+        help="licensed product roots to download (default: ZC ZW)")
+    workspace.add_argument(
+        "--out-dir", default=None,
+        help="output directory (default: <data-root>/raw/lseg_workspace)")
+    workspace.add_argument("--stem", default="zc_zw_daily",
+                           help="base filename for export and sidecars")
+    workspace.add_argument("--dry-run", action="store_true",
+                           help="list the request without opening Workspace")
+    workspace.add_argument("--json", action="store_true", dest="output_json")
+
+    futures_import = commands.add_parser(
+        "futures-import", parents=[_global_options()],
+        help="normalize a licensed individual-contract CSV or Parquet export")
+    futures_import.add_argument("--input", required=True, help="vendor CSV or Parquet export")
+    futures_import.add_argument(
+        "--mapping", default="config/futures_import_template.yaml",
+        help="explicit vendor-to-canonical YAML mapping")
+    futures_import.add_argument("--out", default="futures_contracts",
+                                help="processed table name")
+    futures_import.add_argument("--dry-run", action="store_true")
+    futures_import.add_argument("--json", action="store_true", dest="output_json")
+
+    futures_audit = commands.add_parser(
+        "futures-audit", parents=[_global_options()],
+        help="audit a canonical individual-contract CSV or Parquet table")
+    futures_audit.add_argument("--contracts", required=True)
+    futures_audit.add_argument("--json", action="store_true", dest="output_json")
+
+    futures_backtest = commands.add_parser(
+        "futures-backtest", parents=[_global_options()],
+        help="execute dated BUY/SELL/HOLD decisions against individual contracts")
+    futures_backtest.add_argument("--contracts", required=True)
+    futures_backtest.add_argument("--signals", required=True)
+    futures_backtest.add_argument(
+        "--execution-config", default="config/futures_execution.yaml")
+    futures_backtest.add_argument("--capital", type=float, default=None,
+                                  help="capital available for maintenance margin")
+    futures_backtest.add_argument("--out", default="futures_trade_ledger")
+    futures_backtest.add_argument("--dry-run", action="store_true")
+    futures_backtest.add_argument("--json", action="store_true", dest="output_json")
     return parser
 
 
@@ -373,6 +443,281 @@ def build_features(args: argparse.Namespace, geography: Geography,
     return 0
 
 
+def produce_signal(args: argparse.Namespace, geography: Geography,
+                   raw: RawStore, processed: ProcessedStore) -> int:
+    """Run the frozen candidate without granting it authority to trade."""
+    from .signal_inference import render_summary, run_primary_signal, save_run
+
+    as_of = args.as_of or datetime.now(timezone.utc).date()
+    try:
+        run = run_primary_signal(
+            raw=raw, processed=processed, geography=geography, as_of=as_of)
+        record = run.record
+        saved: tuple[Path, Path] | None = None
+        if not args.dry_run:
+            saved = save_run(run, raw.root)
+            record = json.loads(saved[0].read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"signal error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.output_json:
+        print(json.dumps(record, indent=2, sort_keys=True, allow_nan=False))
+    else:
+        print(render_summary(record))
+        if args.dry_run:
+            print("  dry run: no model artifact or decision record written")
+        elif saved:
+            print(f"  record:        {saved[0]}")
+            print(f"  model:         {saved[1]}")
+    return 0
+
+
+def download_workspace_futures(args: argparse.Namespace, raw: RawStore) -> int:
+    from .lseg_workspace_futures import (
+        WorkspaceFuturesError,
+        contract_requests,
+        download_workspace_history,
+        save_workspace_download,
+    )
+
+    try:
+        years = _int_list(args.delivery_years, "delivery-years", 2000, 2099)
+        today = datetime.now(timezone.utc).date()
+        end = args.end or today
+        requests = contract_requests(years, args.roots, as_of=today)
+        output_dir = Path(args.out_dir) if args.out_dir else raw.raw_dir / "lseg_workspace"
+        if args.dry_run:
+            payload = {
+                "start": args.start.isoformat(),
+                "end": end.isoformat(),
+                "delivery_years": list(years),
+                "roots": list(args.roots),
+                "contracts": [asdict(request) for request in requests],
+                "output_dir": str(output_dir),
+            }
+            if args.output_json:
+                print(json.dumps(payload, indent=2, sort_keys=True))
+            else:
+                print(
+                    f"Workspace dry run: {len(requests)} contracts, "
+                    f"{args.start}..{end} -> {output_dir}"
+                )
+                for request in requests:
+                    print(f"  {request.contract:6s} {request.ric}")
+                print("dry run: Workspace was not opened and nothing was written")
+            return 0
+
+        completed = 0
+
+        def report(result: Any) -> None:
+            nonlocal completed
+            completed += 1
+            stream = sys.stderr if args.output_json else sys.stdout
+            suffix = (
+                f"{result.rows_retained} rows"
+                if result.status == "ok"
+                else f"ERROR {result.error}"
+            )
+            print(
+                f"[{completed:3d}/{len(requests)}] {result.contract} "
+                f"{result.ric}: {suffix}",
+                file=stream,
+                flush=True,
+            )
+
+        download = download_workspace_history(
+            start=args.start,
+            end=end,
+            delivery_years=years,
+            roots=args.roots,
+            as_of=today,
+            progress=report,
+        )
+        export, manifest, mapping = save_workspace_download(
+            download, output_dir, stem=args.stem
+        )
+    except (WorkspaceFuturesError, OSError, ValueError) as exc:
+        print(f"Workspace futures download error: {exc}", file=sys.stderr)
+        return 1
+
+    failures = download.requested_contracts - download.successful_contracts
+    payload = {
+        "rows": len(download.frame),
+        "requested_contracts": download.requested_contracts,
+        "successful_contracts": download.successful_contracts,
+        "failed_contracts": failures,
+        "export": str(export),
+        "manifest": str(manifest),
+        "mapping": str(mapping),
+    }
+    if args.output_json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(
+            f"downloaded {len(download.frame):,} rows from "
+            f"{download.successful_contracts}/{download.requested_contracts} contracts"
+        )
+        print(f"wrote {export}")
+        print(f"wrote {manifest}")
+        print(f"wrote {mapping}")
+        if failures:
+            print(
+                f"warning: {failures} contract(s) failed; inspect the query manifest "
+                "before importing"
+            )
+    return 0 if failures == 0 else 2
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _load_signal_decisions(path: str | Path) -> "pd.DataFrame":
+    """Read a simple decision table or one/many production signal records."""
+    import pandas as pd
+
+    source = Path(path)
+    if not source.exists():
+        raise ValueError(f"signal input does not exist: {source}")
+    if source.suffix.lower() == ".csv":
+        frame = pd.read_csv(source)
+    elif source.suffix.lower() in {".parquet", ".pq"}:
+        frame = pd.read_parquet(source, engine="pyarrow")
+    elif source.suffix.lower() == ".json":
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        records = payload if isinstance(payload, list) else [payload]
+        rows = []
+        for record in records:
+            signal = record.get("signal", record) if isinstance(record, dict) else {}
+            rows.append({
+                "decision_date": signal.get("date", signal.get("decision_date")),
+                "action": signal.get("action"),
+            })
+        frame = pd.DataFrame(rows)
+    else:
+        raise ValueError("signal input must be .json, .csv, .parquet, or .pq")
+    if not {"decision_date", "action"}.issubset(frame.columns):
+        raise ValueError("signal input must contain decision_date and action")
+    return frame[["decision_date", "action"]]
+
+
+def import_futures(args: argparse.Namespace, processed: ProcessedStore) -> int:
+    from .futures_data import (
+        FuturesDataError, import_contract_export, render_audit, save_import,
+    )
+
+    try:
+        result = import_contract_export(args.input, args.mapping)
+    except FuturesDataError as exc:
+        print(f"futures import error: {exc}", file=sys.stderr)
+        return 1
+    audit = result.manifest["audit"]
+    if args.output_json:
+        print(json.dumps(result.manifest, indent=2, sort_keys=True, default=str))
+    else:
+        # Render from a fresh audit so the human form stays centralized.
+        from .futures_data import audit_contract_panel
+        print(render_audit(audit_contract_panel(result.frame)))
+    if not audit["pricing_valid"]:
+        print("futures import error: pricing audit failed; nothing written", file=sys.stderr)
+        return 1
+    if args.dry_run:
+        if not args.output_json:
+            print("dry run: no processed table or manifest written")
+        return 0
+    table, manifest = save_import(result, processed, name=args.out)
+    if not args.output_json:
+        print(f"wrote {table}")
+        print(f"wrote {manifest}")
+    return 0
+
+
+def audit_futures(args: argparse.Namespace) -> int:
+    from .futures_data import FuturesDataError, audit_contract_panel, read_export, render_audit
+
+    try:
+        report = audit_contract_panel(read_export(args.contracts))
+    except FuturesDataError as exc:
+        print(f"futures audit error: {exc}", file=sys.stderr)
+        return 1
+    if args.output_json:
+        print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
+    else:
+        print(render_audit(report))
+    return 0 if report.pricing_valid else 1
+
+
+def backtest_futures(args: argparse.Namespace, processed: ProcessedStore) -> int:
+    import pandas as pd
+
+    from .futures_data import FuturesDataError, audit_contract_panel, read_export, render_audit
+    from .futures_execution import ExecutionError, load_execution_config, simulate_spread_trades
+
+    contract_path = Path(args.contracts)
+    signal_path = Path(args.signals)
+    config_path = Path(args.execution_config)
+    if not config_path.is_absolute():
+        config_path = Path(__file__).resolve().parents[2] / config_path
+    try:
+        contracts = read_export(contract_path)
+        report = audit_contract_panel(contracts)
+        if not report.ready_for_execution:
+            print(render_audit(report), file=sys.stderr)
+            print("futures backtest error: contract data is not execution-ready", file=sys.stderr)
+            return 1
+        signals = _load_signal_decisions(signal_path)
+        config = load_execution_config(config_path)
+        ledger = simulate_spread_trades(
+            signals, contracts, config=config, capital_usd=args.capital)
+    except (FuturesDataError, ExecutionError, ValueError, OSError, json.JSONDecodeError) as exc:
+        print(f"futures backtest error: {exc}", file=sys.stderr)
+        return 1
+
+    executed = int((ledger.get("status") == "EXECUTED").sum()) if len(ledger) else 0
+    net = float(ledger.get("net_pnl_usd", pd.Series(dtype=float)).sum()) if len(ledger) else 0.0
+    if args.output_json:
+        print(ledger.to_json(orient="records", date_format="iso", indent=2))
+    else:
+        print(f"futures ledger: {len(ledger)} decisions, {executed} executed, net ${net:,.2f}")
+        if "status" in ledger:
+            for status, count in ledger["status"].value_counts().items():
+                print(f"  {status:22s} {count:5d}")
+    if args.dry_run:
+        if not args.output_json:
+            print("dry run: no ledger or manifest written")
+        return 0
+
+    ledger_path = processed.write(args.out, ledger)
+    manifest_path = ledger_path.with_suffix(".manifest.json")
+    manifest = {
+        "schema_version": 1,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "contracts_file": contract_path.name,
+        "contracts_sha256": _file_sha256(contract_path),
+        "signals_file": signal_path.name,
+        "signals_sha256": _file_sha256(signal_path),
+        "execution_config": config_path.name,
+        "execution_config_sha256": _file_sha256(config_path),
+        "execution_assumptions": asdict(config.assumptions),
+        "decisions": len(ledger),
+        "executed": executed,
+        "net_pnl_usd": net,
+        "ledger": ledger_path.name,
+    }
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if not args.output_json:
+        print(f"wrote {ledger_path}")
+        print(f"wrote {manifest_path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.data_root) if args.data_root else default_data_root()
@@ -388,6 +733,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return clean_source(args, sources, geography, raw, processed)
         if args.command == "features":
             return build_features(args, geography, processed)
+        if args.command == "signal":
+            return produce_signal(args, geography, raw, processed)
+        if args.command == "futures-workspace-download":
+            return download_workspace_futures(args, raw)
+        if args.command == "futures-import":
+            return import_futures(args, processed)
+        if args.command == "futures-audit":
+            return audit_futures(args)
+        if args.command == "futures-backtest":
+            return backtest_futures(args, processed)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)

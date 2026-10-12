@@ -12,6 +12,7 @@ from pipeline import signal_eval, signals
 
 def test_market_neutral_targets_remove_the_common_agricultural_move() -> None:
     frame = pd.DataFrame({
+        "date": [pd.Timestamp("2026-09-01")],
         "fwd5_corn": [0.04],
         "fwd5_soybeans": [0.02],
         "fwd5_wheat": [0.02],
@@ -23,6 +24,22 @@ def test_market_neutral_targets_remove_the_common_agricultural_move() -> None:
     assert result.loc[0, "target_raw_corn_5"] == pytest.approx(0.04)
     assert result.loc[0, "target_corn_wheat_5"] == pytest.approx(0.02)
     assert result.loc[0, "target_corn_ag_beta_5"] == pytest.approx(0.01)
+
+
+def test_target_end_date_identifies_when_an_outcome_becomes_known() -> None:
+    dates = pd.date_range("2026-09-01", periods=8, freq="B")
+    frame = pd.DataFrame({
+        "date": dates,
+        "fwd5_corn": np.arange(8, dtype=float),
+        "fwd5_soybeans": np.arange(8, dtype=float),
+        "fwd5_wheat": np.arange(8, dtype=float),
+        "corn_beta_ag126": np.ones(8),
+    })
+
+    result = signals.add_targets(frame, (5,))
+
+    assert result.loc[0, "target_end_date_5"] == dates[5]
+    assert pd.isna(result.loc[3, "target_end_date_5"])
 
 
 def test_pollination_interactions_only_turn_on_in_july_and_august() -> None:
@@ -120,7 +137,7 @@ def test_forecast_feature_set_starts_when_forecast_coverage_begins() -> None:
         "fc_610temp": [np.nan, np.nan, 0.2, np.nan],
     })
 
-    result = signal_eval._eligible_rows(
+    result = signal_eval.eligible_rows(
         frame, features=("d2_delta1", "fc_610temp"),
         target_column="target_raw_corn_5")
 

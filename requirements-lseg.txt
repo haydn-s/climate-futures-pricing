@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Optional licensed-data adapter. The public-data pipeline does not require it.
+lseg-data>=2.1,<3

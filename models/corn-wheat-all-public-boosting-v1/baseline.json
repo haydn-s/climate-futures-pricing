@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "baseline_id": "ml-signal-baseline-v1",
+  "model_version": "corn-wheat-all-public-boosting-v1",
+  "frozen_on": "2026-10-09",
+  "research_commit": "3cff1fe472299d026282f8fdd6db62ef13a5c0c1",
+  "holdout": {
+    "start_year": 2024,
+    "end_date": "2026-09-24",
+    "consumed": true,
+    "reuse_for_model_selection": false
+  },
+  "specification": {
+    "target": "corn_wheat",
+    "target_definition": "five-session corn return minus five-session wheat return",
+    "horizon_trading_days": 5,
+    "feature_set": "all_public",
+    "features": [
+      "d2_delta1",
+      "d2_delta2",
+      "d2_delta4",
+      "d0_delta1",
+      "d0_delta2",
+      "d0_delta4",
+      "heat_dd7_z",
+      "heat_dd14_z",
+      "precip30_z",
+      "precip60_z",
+      "stage_pre",
+      "stage_pollination",
+      "stage_harvest",
+      "pollination_heat",
+      "pollination_drought",
+      "corn_mom5",
+      "corn_mom20",
+      "soybeans_mom20",
+      "wheat_mom20",
+      "corn_vol20",
+      "ag_vol20",
+      "corn_beta_ag126",
+      "corn_rel_mom20",
+      "fc_610temp",
+      "fc_610temp_rev",
+      "fc_814temp",
+      "fc_814temp_rev",
+      "fc_610prcp",
+      "fc_610prcp_rev",
+      "fc_814prcp",
+      "fc_814prcp_rev",
+      "pollination_temp_revision"
+    ],
+    "model_family": "histogram_gradient_boosting_regressor",
+    "candidate_hyperparameters": {
+      "max_leaf_nodes": [7, 15],
+      "max_iter": 150,
+      "learning_rate": 0.05,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "threshold_selection": "training-only trailing validation block",
+    "transaction_cost_bps_per_leg": 5.0,
+    "traded_legs": 2
+  },
+  "evaluation": {
+    "development": {
+      "observations": 212,
+      "trades": 132,
+      "positive_folds": 4,
+      "folds": 4,
+      "r2": -0.0742118,
+      "sharpe": 0.81457559,
+      "total_net": 0.72788976,
+      "max_drawdown": -0.24227195
+    },
+    "holdout": {
+      "observations": 73,
+      "trades": 17,
+      "hit_rate": 0.64705882,
+      "sharpe": 0.87936466,
+      "total_net": 0.11344805,
+      "max_drawdown": -0.09075423
+    },
+    "passes_paper_trading_gate": true,
+    "live_capital_approved": false
+  },
+  "data_snapshot": {
+    "manifest_sha256": "0009d7efb9d7f87beec732f4c4be62a56ddc97c6162705036a58b114ea6570a6",
+    "processed_tables": {
+      "cpc_outlook_point_daily": "bba4c2f54732b5a6d58982f44ac0e82cae8e694de037bcfacb3a326ac036b76f",
+      "nasa_power_point_daily": "bcc37518341aac582cb60980a81e125f2501241388d7b2e1089cfba210a99c04",
+      "nclimgrid_county_daily": "cacd6bf7ea731e330ae238e20cae08cab88924929da00c28380e41e6813ea04c",
+      "usdm_county_drought": "7a95532a26652e00566fe32d82e3fdbe7c95513c876581e11ea71be9dce215fa",
+      "yahoo_prices_daily": "3503fe1ad763a36c540adf749c1727d59b434dd166f22bf3257a003ac76f7ffc"
+    },
+    "config": {
+      "geography_yaml": "0d1884d0046e481b3e3bf9c316bb627139f902c2dfd144e7a9b9f78d578522c8",
+      "sources_yaml": "19accf2ba2560c047269b876933e7d9e616e82df42df79d2d6796d24dac34096"
+    },
+    "results_csv_sha256": "72bfedcf2c5052a1501719989d5af22996e1de732d7d555a760162f670296f06",
+    "requirements_sha256": "bb4a543b38450eb57a9b7f2345755a2ded02002d0205ee731b58a76ce4f113cf"
+  }
+}
