@@ -99,10 +99,14 @@ gross returns are positive under every tested roll window, but base and stress
 costs erase them. This is evidence against stable executable effectiveness, not
 a reason to tune v1 against the consumed history.
 
-The replay uses average leg notional as its denominator because historical
-margin is unavailable. It is not a return-on-capital backtest. Detailed methods
-and the sensitivity grid are in
+The original replay uses average leg notional so its full 2015-2026 history is
+not a return-on-capital backtest. A separate dated-margin replay covers the
+official CME public window from June 30, 2020 through June 30, 2026. Every tested
+development capital path is negative; the least-negative result is −3.7% on
+$100,000 of starting capital. Detailed methods and the sensitivity grid are in
 [`../../analysis/lseg_signal_replay_report.md`](../../analysis/lseg_signal_replay_report.md).
+The capital results and source hashes are in
+[`../../analysis/lseg_capital_simulation_report.md`](../../analysis/lseg_capital_simulation_report.md).
 
 ## Limitations and prohibited uses
 
@@ -125,3 +129,9 @@ Freeze v1 during its initial paper-trading period. Log every eligible signal
 before its outcome is known, investigate operational failures without changing
 the specification, and defer performance-driven tuning until a meaningful unseen
 sample—preferably a complete growing season—has accumulated.
+
+The enforced workflow is documented in
+[`../../docs/prospective_paper_trading.md`](../../docs/prospective_paper_trading.md).
+It writes an immutable same-day decision record before entry data exist, then
+appends a separately hash-linked outcome after the five-session horizon. Late or
+backfilled registrations are rejected rather than relabeled as prospective.

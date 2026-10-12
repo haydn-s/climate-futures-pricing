@@ -120,11 +120,36 @@ def test_futures_commands_parse_without_implying_a_vendor() -> None:
         "futures-audit", "--contracts", "contracts.parquet", "--json",
     ])
     assert audited.output_json is True
+    margins = build_parser().parse_args([
+        "futures-margin-enrich", "--contracts", "contracts.parquet",
+        "--corn-pdf", "corn.pdf", "--wheat-pdf", "wheat.pdf", "--dry-run",
+    ])
+    assert margins.command == "futures-margin-enrich"
+    assert margins.out == "futures_contracts_with_margin"
+    assert margins.dry_run is True
     backtest = build_parser().parse_args([
         "futures-backtest", "--contracts", "contracts.parquet",
         "--signals", "signals.csv", "--capital", "25000",
     ])
     assert backtest.capital == 25_000
+
+
+def test_prospective_paper_commands_parse_without_broker_authority() -> None:
+    register = build_parser().parse_args([
+        "paper-register", "--signal-record", "signal.json",
+        "--contracts", "contracts.parquet", "--dry-run", "--json",
+    ])
+    assert register.command == "paper-register"
+    assert register.signal_record == "signal.json"
+    assert register.dry_run is True
+    resolve = build_parser().parse_args([
+        "paper-resolve", "--contracts", "contracts.parquet", "--dry-run",
+    ])
+    assert resolve.command == "paper-resolve"
+    assert resolve.dry_run is True
+    status = build_parser().parse_args(["paper-status", "--json"])
+    assert status.command == "paper-status"
+    assert status.output_json is True
 
 
 # -------------------------------------------------------------------- dispatch
@@ -402,6 +427,21 @@ def test_futures_import_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
     ]) == 0
     assert "dry run" in capsys.readouterr().out
     assert not (tmp_path / "processed").exists()
+
+
+def test_saved_production_signal_json_supplies_its_nested_decision_date(
+        tmp_path: Path) -> None:
+    path = tmp_path / "signal.json"
+    path.write_text(json.dumps({
+        "decision": {"date": "2026-01-02"},
+        "signal": {"action": "BUY"},
+    }), encoding="utf-8")
+
+    loaded = cli._load_signal_decisions(path)
+
+    assert loaded.to_dict("records") == [
+        {"decision_date": "2026-01-02", "action": "BUY"}
+    ]
 
 
 def test_workspace_download_dry_run_never_opens_lseg(tmp_path: Path, capsys) -> None:

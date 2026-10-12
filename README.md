@@ -188,9 +188,10 @@ pricing audit passes. The query manifest records 23,990 rows lacking complete
 OHLC and two rows with impossible open/high/low relationships that were excluded
 from the import export. Reconstructed front-month returns have zero median
 absolute daily-return difference from the existing Yahoo continuous histories;
-correlations are 0.803 for corn and 0.942 for wheat. Execution remains blocked
-only for the full capital-constrained backtest because dated historical
-maintenance margin is not yet present.
+correlations are 0.803 for corn and 0.942 for wheat. Official CME minimum-
+performance-bond history now supplies dated margin for the public June 30, 2020
+through June 30, 2026 window; earlier contract prices remain useful for the
+price-only replay but are excluded from return-on-capital claims.
 
 A post-freeze replay now tests v1 without retraining or changing its threshold.
 Replacing the Yahoo target with same-date LSEG settlements preserves the market
@@ -211,6 +212,58 @@ The aggregate tables can be committed; the row-level licensed ledger remains
 ignored under `data/analysis/`.
 
 Run: `PYTHONPATH=src python analysis/lseg_signal_replay.py`
+
+The fixed-specification attribution study shows where development performance
+is lost. Replacing Yahoo with dated LSEG settlement reduces aggregate net by
+32.7 percentage points; shifting to next-open execution removes another 2.8
+points. Applying the frozen no-overlap rule is the largest operational change,
+removing 49 clustered signals and 30.7 points. Replacing the equivalent 10-bps
+bridge with per-contract commission and slippage removes the final 13.8 points,
+leaving −7.1%. Confidence is not monotonically related to performance, so the
+diagnostic does not support a defensible retrospective threshold adjustment.
+The year-block development interval is wide (−42.5% to +37.1%), emphasizing
+uncertainty rather than a stable negative or positive edge.
+
+Full attribution, cost capacity, aggregate direction/confidence/season/roll
+strata, and uncertainty are in
+[`analysis/lseg_execution_attribution_report.md`](analysis/lseg_execution_attribution_report.md).
+Run: `PYTHONPATH=src python analysis/lseg_execution_attribution.py`
+
+The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
+code to the expiry-ordered LSEG contract strip, and creates an ignored,
+execution-ready panel. All 28,387 contract rows inside the public window match
+an exact business-date/roll-position rate. The capital replay resets each sample
+to $10k, $25k, $50k, or $100k and lets realized P&L change the next trade's
+budget. All four development paths lose money; the least-negative is −3.7% on
+$100k. The already-consumed holdout remains positive but is descriptive only.
+The full aggregate results and source hashes are in
+[`analysis/lseg_capital_simulation_report.md`](analysis/lseg_capital_simulation_report.md).
+
+```bash
+PYTHONPATH=src python -m pipeline futures-margin-enrich \
+  --contracts data/processed/futures_contracts.parquet \
+  --corn-pdf /path/to/C-2020-to-present.pdf \
+  --wheat-pdf /path/to/W-2020-to-present.pdf
+PYTHONPATH=src python analysis/lseg_capital_simulation.py
+```
+
+Prospective validation now uses separate immutable decision and outcome
+records. A decision must be registered on its decision date before the LSEG
+panel contains a possible next-session entry. The later resolver applies the
+same contract selection, holding period, costs, and no-overlap policy and links
+the outcome to hashes of the original decision, config, and resolving contract
+snapshot. Neither command has order authority. The weekly operating procedure
+is documented in
+[`docs/prospective_paper_trading.md`](docs/prospective_paper_trading.md).
+
+```bash
+PYTHONPATH=src python -m pipeline paper-register \
+  --signal-record data/signals/corn-wheat-all-public-boosting-v1/RECORD.json \
+  --contracts data/processed/futures_contracts.parquet
+PYTHONPATH=src python -m pipeline paper-resolve \
+  --contracts data/processed/futures_contracts.parquet
+PYTHONPATH=src python -m pipeline paper-status
+```
 
 ### 5. Event timing is real but not cleanly attributable
 
@@ -398,6 +451,12 @@ PYTHONPATH=src python -m pipeline signal --dry-run
 PYTHONPATH=src python -m pipeline futures-workspace-download \
   --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
 PYTHONPATH=src python analysis/lseg_signal_replay.py
+PYTHONPATH=src python analysis/lseg_execution_attribution.py
+PYTHONPATH=src python -m pipeline paper-register \
+  --signal-record SIGNAL.json --contracts data/processed/futures_contracts.parquet --dry-run
+PYTHONPATH=src python -m pipeline paper-resolve \
+  --contracts data/processed/futures_contracts.parquet --dry-run
+PYTHONPATH=src python -m pipeline paper-status
 PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
@@ -429,6 +488,9 @@ reproduce.py             resumable end-to-end workflow
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command
 - [x] Licensed LSEG Workspace contract downloader and validated 2011-2026 ZC/ZW panel
 - [x] Frozen-signal LSEG target and next-open execution replay with cost sensitivity
+- [x] Fixed-specification execution attribution and cost-capacity diagnostics
+- [x] Immutable, hash-linked prospective paper decision and outcome workflow
+- [x] Official CME dated-margin ingestion and 2020-2026 capital-constrained replay
 - [x] Drought event, attribution, cross-crop, and seasonal falsification studies
 - [x] Cocoa and coffee measurement case studies
 - [x] One-command current-data reproduction workflow

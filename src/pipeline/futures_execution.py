@@ -320,6 +320,10 @@ def simulate_spread_trades(
     assumptions = config.assumptions
     if capital_usd is not None and capital_usd <= 0:
         raise ExecutionError("capital_usd must be positive")
+    if capital_usd is not None and assumptions.allow_overlapping_positions:
+        raise ExecutionError(
+            "capital-constrained simulation requires non-overlapping positions"
+        )
     if not {"decision_date", "action"}.issubset(signals.columns):
         raise ExecutionError("signals must contain decision_date and action")
 
@@ -350,8 +354,11 @@ def simulate_spread_trades(
 
     rows: list[dict[str, object]] = []
     open_through: pd.Timestamp | None = None
+    account_equity = float(capital_usd) if capital_usd is not None else None
     for decision in decisions.itertuples(index=False):
         base = {"decision_date": decision.decision_date, "action": decision.action}
+        if account_equity is not None:
+            base["capital_before_usd"] = account_equity
         if decision.action == "HOLD":
             rows.append({**base, "status": "HOLD"})
             continue
@@ -409,8 +416,8 @@ def simulate_spread_trades(
         }
 
         margin_budget = None
-        if capital_usd is not None:
-            margin_budget = capital_usd * assumptions.max_margin_fraction
+        if account_equity is not None:
+            margin_budget = max(account_equity, 0.0) * assumptions.max_margin_fraction
         try:
             size = size_dollar_neutral_spread(
                 float(selected["ZC"][assumptions.fill_price_column]),
@@ -455,8 +462,18 @@ def simulate_spread_trades(
         )
         gross_pnl = sum(gross_by_leg.values())
         net_pnl = gross_pnl - commission - slippage
+        capital_fields: dict[str, float] = {}
+        if account_equity is not None:
+            capital_after = account_equity + net_pnl
+            capital_fields = {
+                "margin_budget_usd": float(margin_budget),
+                "margin_utilization": size.maintenance_margin_usd / account_equity,
+                "return_on_capital": net_pnl / account_equity,
+                "capital_after_usd": capital_after,
+            }
         rows.append({
             **base,
+            **capital_fields,
             "status": "EXECUTED",
             "entry_date": entry_date,
             "exit_date": exit_date,
@@ -490,5 +507,7 @@ def simulate_spread_trades(
             "fill_timing": f"next common session {assumptions.fill_price_column}",
             "roll_business_days": assumptions.roll_business_days,
         })
+        if account_equity is not None:
+            account_equity = capital_after
         open_through = exit_date
     return pd.DataFrame(rows)

@@ -247,6 +247,18 @@ def build_parser() -> argparse.ArgumentParser:
     futures_audit.add_argument("--contracts", required=True)
     futures_audit.add_argument("--json", action="store_true", dest="output_json")
 
+    futures_margin = commands.add_parser(
+        "futures-margin-enrich", parents=[_global_options()],
+        help="attach official CME dated minimum-performance-bond history")
+    futures_margin.add_argument("--contracts", required=True)
+    futures_margin.add_argument("--corn-pdf", required=True)
+    futures_margin.add_argument("--wheat-pdf", required=True)
+    futures_margin.add_argument(
+        "--out", default="futures_contracts_with_margin",
+        help="processed table name")
+    futures_margin.add_argument("--dry-run", action="store_true")
+    futures_margin.add_argument("--json", action="store_true", dest="output_json")
+
     futures_backtest = commands.add_parser(
         "futures-backtest", parents=[_global_options()],
         help="execute dated BUY/SELL/HOLD decisions against individual contracts")
@@ -259,6 +271,30 @@ def build_parser() -> argparse.ArgumentParser:
     futures_backtest.add_argument("--out", default="futures_trade_ledger")
     futures_backtest.add_argument("--dry-run", action="store_true")
     futures_backtest.add_argument("--json", action="store_true", dest="output_json")
+
+    paper_register = commands.add_parser(
+        "paper-register", parents=[_global_options()],
+        help="immutably register a frozen signal before its first entry session")
+    paper_register.add_argument("--signal-record", required=True)
+    paper_register.add_argument("--contracts", required=True)
+    paper_register.add_argument(
+        "--execution-config", default="config/futures_execution.yaml")
+    paper_register.add_argument("--dry-run", action="store_true")
+    paper_register.add_argument("--json", action="store_true", dest="output_json")
+
+    paper_resolve = commands.add_parser(
+        "paper-resolve", parents=[_global_options()],
+        help="append outcomes for registered paper signals when the horizon is complete")
+    paper_resolve.add_argument("--contracts", required=True)
+    paper_resolve.add_argument(
+        "--execution-config", default="config/futures_execution.yaml")
+    paper_resolve.add_argument("--dry-run", action="store_true")
+    paper_resolve.add_argument("--json", action="store_true", dest="output_json")
+
+    paper_status = commands.add_parser(
+        "paper-status", parents=[_global_options()],
+        help="summarize the immutable prospective paper ledger")
+    paper_status.add_argument("--json", action="store_true", dest="output_json")
     return parser
 
 
@@ -594,8 +630,11 @@ def _load_signal_decisions(path: str | Path) -> "pd.DataFrame":
         rows = []
         for record in records:
             signal = record.get("signal", record) if isinstance(record, dict) else {}
+            decision = record.get("decision", {}) if isinstance(record, dict) else {}
             rows.append({
-                "decision_date": signal.get("date", signal.get("decision_date")),
+                "decision_date": decision.get(
+                    "date", signal.get("date", signal.get("decision_date"))
+                ),
                 "action": signal.get("action"),
             })
         frame = pd.DataFrame(rows)
@@ -650,6 +689,80 @@ def audit_futures(args: argparse.Namespace) -> int:
     else:
         print(render_audit(report))
     return 0 if report.pricing_valid else 1
+
+
+def enrich_futures_margins(args: argparse.Namespace, processed: ProcessedStore) -> int:
+    """Parse CME's public PDFs and create the executable covered-date panel."""
+
+    from .cme_margin_data import (
+        MarginDataError,
+        attach_margin_history,
+        parse_cme_margin_pdfs,
+        pdf_manifest,
+        sha256_file,
+    )
+    from .futures_data import FuturesDataError, audit_contract_panel, read_export
+
+    contract_path = Path(args.contracts)
+    pdf_paths = [Path(args.corn_pdf), Path(args.wheat_pdf)]
+    try:
+        contracts = read_export(contract_path)
+        margins = parse_cme_margin_pdfs(
+            corn_pdf=pdf_paths[0], wheat_pdf=pdf_paths[1]
+        )
+        attachment = attach_margin_history(contracts, margins, drop_unmatched=True)
+        audit = audit_contract_panel(attachment.frame)
+        if not audit.ready_for_execution:
+            raise MarginDataError(
+                "margin-enriched panel failed the execution-readiness audit"
+            )
+    except (MarginDataError, FuturesDataError, OSError, ValueError) as exc:
+        print(f"futures margin error: {exc}", file=sys.stderr)
+        return 1
+
+    manifest = {
+        **attachment.manifest(),
+        "contracts_file": contract_path.name,
+        "contracts_sha256": sha256_file(contract_path),
+        "margin_files": pdf_manifest(pdf_paths),
+        "margin_rows": len(margins),
+        "roots": sorted(margins["root"].unique()),
+        "audit": audit.as_dict(),
+    }
+    if args.output_json:
+        print(json.dumps(manifest, indent=2, sort_keys=True, default=str))
+    else:
+        print(
+            "CME margin coverage: "
+            f"{attachment.start_date} through {attachment.end_date}, "
+            f"{len(margins):,} dated roll rates"
+        )
+        print(
+            f"matched {attachment.matched_rows:,} of "
+            f"{attachment.within_source_dates:,} contract rows; "
+            f"dropped {attachment.dropped_unmatched_rows:,} farther expiries"
+        )
+        print("execution ready: yes")
+    if args.dry_run:
+        if not args.output_json:
+            print("dry run: no processed table or manifest written")
+        return 0
+
+    table_path = processed.write(args.out, attachment.frame)
+    manifest_path = table_path.with_suffix(".manifest.json")
+    manifest_path.write_text(
+        json.dumps(
+            {**manifest, "processed_table": table_path.name},
+            indent=2,
+            sort_keys=True,
+            default=str,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    if not args.output_json:
+        print(f"wrote {table_path}")
+        print(f"wrote {manifest_path}")
+    return 0
 
 
 def backtest_futures(args: argparse.Namespace, processed: ProcessedStore) -> int:
@@ -718,6 +831,106 @@ def backtest_futures(args: argparse.Namespace, processed: ProcessedStore) -> int
     return 0
 
 
+def register_paper_signal(args: argparse.Namespace, raw: RawStore) -> int:
+    """Admit a saved signal to the prospective ledger before entry can occur."""
+    from .futures_data import FuturesDataError
+    from .paper_trading import PaperTradingError, register_signal_file
+
+    try:
+        record, path = register_signal_file(
+            args.signal_record,
+            args.contracts,
+            data_root=raw.root,
+            execution_config_path=args.execution_config,
+            dry_run=args.dry_run,
+        )
+    except (FuturesDataError, PaperTradingError, OSError) as exc:
+        print(f"paper registration error: {exc}", file=sys.stderr)
+        return 1
+    if args.output_json:
+        print(json.dumps(record, indent=2, sort_keys=True, allow_nan=False))
+    else:
+        print(f"paper decision {record['paper_id']}: {record['status']}")
+        print(f"  decision:       {record['decision']['date']} {record['decision']['action']}")
+        print(
+            "  evidence:       "
+            + ("prospective" if record["eligible_for_prospective_evidence"] else "ineligible")
+        )
+        print("  execution:      disabled; zero orders submitted")
+        if args.dry_run:
+            print("  dry run: decision record not written")
+        elif path:
+            print(f"  record:         {path}")
+    return 0
+
+
+def resolve_paper_signals(args: argparse.Namespace, raw: RawStore) -> int:
+    """Append immutable outcomes once five post-entry sessions are observable."""
+    from .futures_data import FuturesDataError
+    from .paper_trading import PaperTradingError, resolve_registered_signals
+
+    try:
+        outcomes, pending = resolve_registered_signals(
+            args.contracts,
+            data_root=raw.root,
+            execution_config_path=args.execution_config,
+            dry_run=args.dry_run,
+        )
+    except (FuturesDataError, PaperTradingError, OSError) as exc:
+        print(f"paper resolution error: {exc}", file=sys.stderr)
+        return 1
+    if args.output_json:
+        print(json.dumps(
+            {"outcomes": outcomes, "pending": pending, "dry_run": args.dry_run},
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        ))
+    else:
+        verb = "would append" if args.dry_run else "appended"
+        print(f"paper outcomes: {verb} {len(outcomes)}; {pending} pending")
+        for outcome in outcomes:
+            execution = outcome["execution"]
+            net = execution.get("execution_net_return")
+            rendered = "" if net is None else f", net {float(net):+.2%}"
+            print(
+                f"  {outcome['paper_id']} {execution['execution_status']}{rendered}"
+            )
+        print("execution disabled; zero orders submitted")
+    return 0
+
+
+def show_paper_status(args: argparse.Namespace, raw: RawStore) -> int:
+    """Report prospective evidence without recalculating or mutating it."""
+    from .paper_trading import PaperTradingError, paper_status
+
+    try:
+        report = paper_status(raw.root)
+    except (PaperTradingError, OSError) as exc:
+        print(f"paper status error: {exc}", file=sys.stderr)
+        return 1
+    if args.output_json:
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    else:
+        print(
+            f"paper ledger: {report['decisions']} decisions, "
+            f"{report['outcomes']} outcomes, "
+            f"{report['pending_actionable']} actionable pending"
+        )
+        print(f"  eligible decisions: {report['eligible_decisions']}")
+        for status, count in report["decision_statuses"].items():
+            print(f"  decision {status:22s} {count:5d}")
+        for status, count in report["outcome_statuses"].items():
+            print(f"  outcome  {status:22s} {count:5d}")
+        print(
+            "  aggregate net:     "
+            f"{report['aggregate_net_on_average_leg_notional']:+.2%} "
+            "on average leg notional"
+        )
+        print("  orders submitted:  0")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.data_root) if args.data_root else default_data_root()
@@ -741,8 +954,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return import_futures(args, processed)
         if args.command == "futures-audit":
             return audit_futures(args)
+        if args.command == "futures-margin-enrich":
+            return enrich_futures_margins(args, processed)
         if args.command == "futures-backtest":
             return backtest_futures(args, processed)
+        if args.command == "paper-register":
+            return register_paper_signal(args, raw)
+        if args.command == "paper-resolve":
+            return resolve_paper_signals(args, raw)
+        if args.command == "paper-status":
+            return show_paper_status(args, raw)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
