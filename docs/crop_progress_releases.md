@@ -102,3 +102,26 @@ shift placebos to underperform.
 
 This test is about scheduled USDA information. It will not reopen GEFS feature or
 threshold search, and a failed result will be reported as another bounded null.
+
+## Development result
+
+The predeclared gate failed. Candidate identity was selected from the 2017–2023
+outer predictions, and the resulting `progress_plus_market_logistic` headline
+was then reported across all nine 2017–2025 development folds. It made 131
+non-overlapping trades, lost 52.7% after modeled costs, recorded −0.81 Sharpe,
+and was positive in only three folds and three calendar years. At doubled costs
+the net result fell to −70.9%.
+
+The headline did outperform the matched logistic market-only model and the fixed
+condition-deterioration rule, but it failed seven checks: positive base and
+doubled-cost net, minimum positive-fold and positive-year support, the 80%
+year-block probability threshold, and both timing-placebo comparisons. The
+USDA features shifted one release forward lost 49.3%; shifted one release
+backward they lost 39.5%, both less than the correctly timed candidate. This
+does not support a repeatable release signal.
+
+Because the development gate failed, the evaluator did not score or return any
+2026 prediction. The model-specific holdout remains sealed, and this
+specification is closed rather than retuned. Aggregate candidate results,
+failure reasons, and exact protocol/model-frame hashes are in
+[`analysis/nass_corn_progress_validation_report.md`](../analysis/nass_corn_progress_validation_report.md).

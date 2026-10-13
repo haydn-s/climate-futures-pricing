@@ -39,6 +39,11 @@ The central result is a useful asymmetry:
   7.3% with −0.98 Sharpe across 14 non-overlapping 2026 trades. It also trailed
   the matched market-only model and a fixed heat-minus-rain rule, so this bounded
   avenue is closed rather than retuned.
+- **Scheduled USDA Crop Progress releases do not rescue the corn signal.** The
+  locked development headline lost 52.7% after modeled costs with −0.81 Sharpe
+  across 131 non-overlapping trades. It failed seven predeclared checks, so the
+  model-specific 2026 holdout remains sealed rather than becoming another
+  opportunity to retune.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -54,6 +59,7 @@ repeatable return forecast.
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
 | Do operational weather-model revisions add information? | Not reliably: the locked GEFS candidate passed development but failed its one-time 2026 holdout. | Operational 00 UTC ensemble-mean runs, exact archived timestamps, dated LSEG next-open labels, 2023–2025 expanding tests, and a sealed 2026 assessment. |
+| Do scheduled USDA Crop Progress releases add information? | Not in the locked test: the selected progress-plus-market model was negative, unstable across years, and weaker than both timing placebos. | Original point-in-time USDA releases, dated LSEG next-open labels, nested 2017–2025 outer tests, costs, fixed-rule and one-release-shift controls; 2026 remains sealed. |
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 | Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
@@ -289,6 +295,20 @@ Aggregate evidence and hashes are in
 [`analysis/gefs_corn_holdout_report.md`](analysis/gefs_corn_holdout_report.md),
 with construction details in
 [`docs/gefs_forecast_revisions.md`](docs/gefs_forecast_revisions.md).
+
+The final scheduled-release test uses the original USDA Crop Progress reports
+available at 4:00 p.m. Eastern, then maps each release to the first later dated
+LSEG corn open. Candidate identity was selected only from 2017–2023 outer
+predictions, with 2024–2025 reserved as final development confirmation years.
+The selected progress-plus-market logistic model made 131 non-overlapping
+development trades, lost 52.7% after costs, and recorded −0.81 Sharpe. It was
+positive in only three of nine years and three of nine outer folds; doubled
+costs reduced the result to −70.9%, and both one-release timing placebos did
+better. Seven gate checks failed, so the predeclared process did not inspect the
+model-specific 2026 holdout. The aggregate result is in
+[`analysis/nass_corn_progress_validation_report.md`](analysis/nass_corn_progress_validation_report.md),
+with construction details in
+[`docs/crop_progress_releases.md`](docs/crop_progress_releases.md).
 
 The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
 code to the expiry-ordered LSEG contract strip, and creates an ignored,
@@ -660,7 +680,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Locked GEFS development validation and one-time sealed 2026 holdout
 - [x] Point-in-time USDA Crop Progress archive, parser, and fixed release features
 - [x] Locked dated-contract USDA Crop Progress execution frame and validation protocol
-- [ ] USDA Crop Progress development evaluation and sealed 2026 assessment
+- [x] USDA Crop Progress development evaluation; gate failed and 2026 stayed sealed
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
