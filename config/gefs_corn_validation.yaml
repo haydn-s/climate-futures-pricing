@@ -19,6 +19,8 @@ sample:
 
 information_boundary:
   outer_test_years: [2023, 2024, 2025]
+  candidate_selection_outer_years: [2023, 2024]
+  final_development_confirmation_year: 2025
   first_outer_training_year: 2021
   untouched_holdout_year: 2026
   holdout_used_for_selection_or_gate: false
@@ -76,6 +78,11 @@ acceptance_gate:
   must_beat_simple_revision_rule_net: true
   both_one_day_shift_placebos_must_underperform: true
   same_day_settlement_diagnostic_excluded_from_claims: true
+
+uncertainty:
+  draws: 2000
+  seed: 590
+  bootstrap_unit: calendar year
 
 reporting:
   inspect_untouched_holdout_only_after_development_gate_is_final: true

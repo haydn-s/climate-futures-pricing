@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pandas as pd
 
 from ..calendar import PUBLICATION_COLUMN
@@ -10,6 +12,7 @@ from ..gefs_archive import GefsArchiveError, decode_points
 from ._common import archived
 
 TABLE = "gefs_corn_point_forecast"
+DECODE_WORKERS = 8
 
 
 def clean(request: CleanRequest) -> list[str]:
@@ -21,47 +24,53 @@ def clean(request: CleanRequest) -> list[str]:
 
     frames: list[pd.DataFrame] = []
     failures: list[str] = []
-    for record, body in archived(request.raw, request.spec.name):
+
+    def decode_record(item):
+        record, body = item
         timestamp_status = record.params.get("archive_timestamp_status")
         if timestamp_status != "plausible_operational_upload":
-            failures.append(
+            return None, (
                 f"{record.key}: archive timestamp is {timestamp_status or 'missing'}"
             )
-            continue
         try:
             frame = decode_points(
                 body, corn.points, statistic=str(record.params["statistic"])
             )
         except (GefsArchiveError, KeyError) as exc:
-            failures.append(f"{record.key}: {exc}")
-            continue
+            return None, f"{record.key}: {exc}"
         expected_lead = int(record.params["lead_hours"])
         if set(frame["lead_hours"]) != {expected_lead}:
-            failures.append(
+            return None, (
                 f"{record.key}: manifest says f{expected_lead:03d}, decoded "
                 f"{sorted(frame['lead_hours'].unique())}"
             )
-            continue
         available_at = pd.Timestamp(record.params["model_available_at"])
         if available_at.tzinfo is None:
-            failures.append(f"{record.key}: model_available_at is not timezone-aware")
-            continue
+            return None, f"{record.key}: model_available_at is not timezone-aware"
         archive_modified = pd.to_datetime(
             record.params.get("archive_last_modified"), utc=True
         )
         if pd.isna(archive_modified) or archive_modified > available_at:
-            failures.append(
+            return None, (
                 f"{record.key}: archive object was not verifiably present by "
                 f"{available_at.isoformat()}"
             )
-            continue
         frame["model_available_at"] = available_at
         frame[PUBLICATION_COLUMN] = available_at.normalize().tz_localize(None)
         frame["archive_last_modified"] = archive_modified
         frame["archive_timestamp_status"] = timestamp_status
         frame["source_sha256"] = record.sha256
         frame["source_key"] = record.key
-        frames.append(frame)
+        return frame, None
+
+    source = archived(request.raw, request.spec.name)
+    with ThreadPoolExecutor(max_workers=DECODE_WORKERS) as executor:
+        decoded = executor.map(decode_record, source, buffersize=DECODE_WORKERS * 2)
+        for frame, failure in decoded:
+            if failure is not None:
+                failures.append(failure)
+            elif frame is not None:
+                frames.append(frame)
 
     if not frames:
         detail = f" First failure: {failures[0]}" if failures else ""

@@ -329,6 +329,8 @@ def build_parser() -> argparse.ArgumentParser:
                                help="geavg and/or gespr (default: geavg)")
     gefs_download.add_argument("--force", action="store_true",
                                help="re-fetch even when this run/lead is archived")
+    gefs_download.add_argument("--workers", type=int, default=4,
+                               help="parallel index/range requests (default: 4)")
     gefs_download.add_argument("--dry-run", action="store_true",
                                help="audit indexes but download no GRIB payload")
     gefs_download.add_argument("--json", action="store_true", dest="output_json")
@@ -351,6 +353,8 @@ def build_parser() -> argparse.ArgumentParser:
                                help="geavg and/or gespr (default: geavg)")
     gefs_backfill.add_argument("--force", action="store_true",
                                help="re-fetch selections already in the manifest")
+    gefs_backfill.add_argument("--workers", type=int, default=8,
+                               help="parallel requests within each run (default: 8)")
     gefs_backfill.add_argument("--dry-run", action="store_true",
                                help="list dates and estimated archive scope without network access")
 
@@ -1129,6 +1133,8 @@ def build_gefs_model_frame(args: argparse.Namespace, processed: ProcessedStore) 
 def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
                   raw: RawStore) -> int:
     """Archive a bounded GEFS sample, preserving intraday availability metadata."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     from .gefs_archive import GefsArchiveError, audit_index, data_url, download_grib
     from .http import FetchError
 
@@ -1136,6 +1142,9 @@ def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
     try:
         leads = _gefs_leads(args, spec)
         statistics = tuple(args.statistics)
+        workers = int(getattr(args, "workers", 1))
+        if not 1 <= workers <= 16:
+            raise GefsArchiveError("--workers must be between 1 and 16")
         initialized = datetime(
             args.date.year, args.date.month, args.date.day, args.cycle,
             tzinfo=timezone.utc,
@@ -1145,12 +1154,15 @@ def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
         )
         records = []
         planned = []
+        jobs = []
+        existing = {
+            record.key: record for record in raw.history(spec.name)
+        } if not args.force else {}
         for statistic in statistics:
             for lead in leads:
                 key = f"{initialized:%Y%m%d}/{initialized:%H}/{statistic}/f{lead:03d}"
-                existing = raw.latest(spec.name, key)
-                if (not args.dry_run and not args.force and existing is not None
-                        and existing.path.exists()):
+                archived = existing.get(key)
+                if (not args.dry_run and archived is not None and archived.path.exists()):
                     planned.append({
                         "key": key,
                         "lead_hours": lead,
@@ -1160,30 +1172,56 @@ def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
                         "status": "already_archived",
                     })
                     continue
-                audit = audit_index(spec, initialized, statistic, lead)
                 item = {
                     "key": key,
                     "lead_hours": lead,
                     "statistic": statistic,
-                    "ranges": len(audit.ranges),
-                    "transfer_bytes": audit.transfer_bytes,
-                    "status": "planned",
+                    "ranges": 0,
+                    "transfer_bytes": 0,
+                    "status": "fetching",
                 }
                 planned.append(item)
-                if args.dry_run:
+                jobs.append((statistic, lead, item))
+
+        def fetch_one(statistic: str, lead: int):
+            audit = audit_index(spec, initialized, statistic, lead)
+            if args.dry_run:
+                return audit, None, ()
+            body, headers = download_grib(audit)
+            return audit, body, headers
+
+        failures = []
+        with ThreadPoolExecutor(max_workers=min(workers, len(jobs) or 1)) as executor:
+            futures = {
+                executor.submit(fetch_one, statistic, lead): item
+                for statistic, lead, item in jobs
+            }
+            for future in as_completed(futures):
+                item = futures[future]
+                try:
+                    audit, body, headers = future.result()
+                except (FetchError, GefsArchiveError, OSError, ValueError) as exc:
+                    item["status"] = "failed"
+                    item["error"] = str(exc)
+                    failures.append((item["key"], str(exc)))
                     continue
-                body, headers = download_grib(audit)
+                item["ranges"] = len(audit.ranges)
+                item["transfer_bytes"] = audit.transfer_bytes
+                if args.dry_run:
+                    item["status"] = "planned"
+                    continue
+                assert body is not None
                 archive_modified = audit.last_modified.isoformat() if audit.last_modified else None
                 record = raw.save(
                     spec.name,
-                    key,
+                    item["key"],
                     body,
                     url=data_url(audit.url),
                     params={
                         "initialized_at": initialized.isoformat(),
                         "model_available_at": available_at.isoformat(),
-                        "lead_hours": lead,
-                        "statistic": statistic,
+                        "lead_hours": item["lead_hours"],
+                        "statistic": item["statistic"],
                         "selectors": list(spec.params["selectors"]),
                         "ranges": [
                             {"start": value.start, "end": value.end,
@@ -1208,12 +1246,14 @@ def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
         print(f"GEFS download error: {exc}", file=sys.stderr)
         return 1
 
+    planned.sort(key=lambda item: (item["statistic"], item["lead_hours"]))
     report = {
         "operational_run": initialized.isoformat(),
         "model_available_at": available_at.isoformat(),
         "dry_run": bool(args.dry_run),
         "items": planned,
         "archived": len(records),
+        "failed": len(failures),
         "planned_transfer_bytes": sum(item["transfer_bytes"] for item in planned),
     }
     if getattr(args, "output_json", False):
@@ -1230,6 +1270,10 @@ def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
                 f"{item['transfer_bytes'] / 1048576:6.2f} MiB"
             )
         print("  orders submitted: 0")
+    if failures:
+        for key, error in failures[:3]:
+            print(f"GEFS download error: {key}: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -1309,6 +1353,7 @@ def backfill_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
             dry_run=False,
             output_json=False,
             quiet=True,
+            workers=args.workers,
         )
         if download_gefs(child, sources, raw):
             failed.append(run_date)

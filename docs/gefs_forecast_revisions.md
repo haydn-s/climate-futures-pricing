@@ -91,6 +91,7 @@ PYTHONPATH=src python -m pipeline gefs-backfill \
 PYTHONPATH=src python -m pipeline clean --source gefs_forecast
 PYTHONPATH=src python -m pipeline gefs-features
 PYTHONPATH=src python -m pipeline gefs-model-frame
+PYTHONPATH=src python analysis/gefs_corn_validation.py
 ```
 
 A live seven-run pilot for July 14-20, 2024 archived all 280 f006-f240 mean
@@ -122,10 +123,37 @@ No same-date settlement or open entered any row.
 
 The evaluation choices were saved before the multi-year return panel was built
 in [`config/gefs_corn_validation.yaml`](../config/gefs_corn_validation.yaml).
-They lock expanding test seasons 2023-2025, an untouched 2026 holdout, four
-feature families, Ridge/logistic/shallow-boosting models, exact base and doubled
-costs, a fixed heat-minus-rain revision rule, one-day-shift placebos, and the
-acceptance gate. The 2026 rows cannot enter model selection or the gate.
+They lock expanding test seasons 2023-2025, candidate ranking on 2023-2024 only,
+2025 as the final development confirmation fold, an untouched 2026 holdout,
+four feature families, Ridge/logistic/shallow-boosting models, exact base and
+doubled costs, a fixed heat-minus-rain revision rule, one-day-shift placebos,
+and the acceptance gate. The 2026 rows cannot enter model selection or the gate.
+The validation script refuses an incomplete 2023-2025 development panel and
+never scores or returns a 2026 prediction. It writes only aggregate candidate
+metrics and a Markdown report; row-level licensed labels remain ignored under
+`data/`.
+
+## Full archive and development result
+
+The locked backfill completed all 738 May-August run dates from 2021 through
+2026: 29,520 selections and 22.93 GiB. Archive timestamps admitted 29,474 files
+and excluded 46 same-day files written after the seven-hour cutoff. That yielded
+442,110 point-fields, 736 complete 10-day runs, 728 exact prior-day revisions,
+and 505 unique next-open decisions after weekend/holiday de-duplication.
+
+Candidate identity was ranked on the 2023-2024 outer predictions only. The
+selected `all_gefs_plus_market_shallow_boosting` specification then remained
+positive in the final 2025 development confirmation fold. Across all three
+development test seasons it made 42 non-overlapping trades, returned +42.0% net
+after modeled costs, recorded 1.57 Sharpe, and was positive in 3/3 years. It
+remained +36.4% at doubled costs, compared with +7.1% for the fixed revision
+rule, +28.7% for the forward-shift placebo, and +18.8% for the backward-shift
+placebo. The complete aggregate output is in
+[`analysis/gefs_corn_validation_report.md`](../analysis/gefs_corn_validation_report.md).
+
+This is not yet the final result. The evaluator did not score or return any 2026
+prediction. The protocol permits one sealed-holdout run now that the development
+gate is final; no specification may change in response to that result.
 
 ## Locked comparisons
 

@@ -131,6 +131,7 @@ def test_gefs_download_defaults_to_mean_and_can_be_a_nonmutating_dry_run() -> No
     assert args.statistics == ["geavg"]
     assert args.leads == ["24"]
     assert args.dry_run is True
+    assert args.workers == 4
 
 
 def test_gefs_download_can_request_a_complete_bounded_horizon() -> None:
@@ -150,6 +151,7 @@ def test_gefs_backfill_defaults_to_the_locked_season_and_horizon() -> None:
     assert args.months == ["5-8"]
     assert args.through_hour == 240
     assert args.statistics == ["geavg"]
+    assert args.workers == 8
     assert args.dry_run is True
 
 

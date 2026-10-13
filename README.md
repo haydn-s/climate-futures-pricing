@@ -34,6 +34,11 @@ The central result is a useful asymmetry:
   but the best pre-2024 candidate is effectively flat after estimated costs. A
   frost-curve pattern in three selected episodes reverses in the newly added
   2000–2011 history and fails its season-matched placebo test.
+- **Operational GEFS revisions clear their development gate.** A newly archived
+  2021–2025 point-in-time panel produces 42 non-overlapping dated-contract corn
+  trades with +42.0% aggregate net return and 1.57 Sharpe across three positive
+  test seasons. Candidate identity used only 2023–2024; 2025 remained positive.
+  This is preliminary until the sealed 2026 holdout is evaluated once.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -48,6 +53,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
+| Do operational weather-model revisions add information? | The locked GEFS development test passes, but its 2026 holdout remains sealed. | Operational 00 UTC ensemble-mean runs, exact archived timestamps, dated LSEG next-open labels, 2023–2025 expanding tests. |
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 | Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
@@ -566,6 +572,7 @@ PYTHONPATH=src python -m pipeline gefs-backfill \
 PYTHONPATH=src python -m pipeline clean --source gefs_forecast
 PYTHONPATH=src python -m pipeline gefs-features
 PYTHONPATH=src python -m pipeline gefs-model-frame
+PYTHONPATH=src python analysis/gefs_corn_validation.py
 PYTHONPATH=src python -m pipeline futures-workspace-download \
   --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
 PYTHONPATH=src python analysis/lseg_signal_replay.py
@@ -631,6 +638,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Fixed Coffee C frost-curve historical extension and season-matched null
 - [x] Operational GEFS index parser and backfill feasibility audit
 - [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
+- [x] Locked GEFS development validation with 2026 holdout still sealed
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
