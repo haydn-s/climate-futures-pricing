@@ -128,12 +128,13 @@ They lock expanding test seasons 2023-2025, candidate ranking on 2023-2024 only,
 four feature families, Ridge/logistic/shallow-boosting models, exact base and
 doubled costs, a fixed heat-minus-rain revision rule, one-day-shift placebos,
 and the acceptance gate. The 2026 rows cannot enter model selection or the gate.
-The validation script refuses an incomplete 2023-2025 development panel and
-never scores or returns a 2026 prediction. It writes only aggregate candidate
-metrics and a Markdown report; row-level licensed labels remain ignored under
-`data/`.
+The development script refuses an incomplete 2023-2025 panel and never scores
+or returns a 2026 prediction. A separate holdout command refuses to run unless
+the development gate passes, the tracked checkout is clean, and its aggregate
+output paths do not already exist. Row-level licensed labels remain ignored
+under `data/`.
 
-## Full archive and development result
+## Full archive, development result, and sealed holdout
 
 The locked backfill completed all 738 May-August run dates from 2021 through
 2026: 29,520 selections and 22.93 GiB. Archive timestamps admitted 29,474 files
@@ -151,9 +152,21 @@ rule, +28.7% for the forward-shift placebo, and +18.8% for the backward-shift
 placebo. The complete aggregate output is in
 [`analysis/gefs_corn_validation_report.md`](../analysis/gefs_corn_validation_report.md).
 
-This is not yet the final result. The evaluator did not score or return any 2026
-prediction. The protocol permits one sealed-holdout run now that the development
-gate is final; no specification may change in response to that result.
+The holdout evaluator and its six checks were then frozen in Git commit
+`b4661fb` before any 2026 score was exposed. The one-time reveal failed. The
+candidate made 14 non-overlapping trades, returned −7.3% net after modeled
+costs, recorded a 42.9% hit rate, and had −0.98 Sharpe. At doubled costs it
+returned −9.1%. The same-model market-only benchmark returned −6.7% with −0.83
+Sharpe, while the fixed heat-minus-rain rule returned +0.5% with 0.07 Sharpe.
+Only the minimum-trade check passed; positive base and doubled-cost net,
+market-only net and Sharpe improvement, and fixed-rule improvement all failed.
+
+The specification therefore does not advance and must not be retuned against
+2026. The result is evidence of development-period instability, not evidence
+that operational weather forecasts can never inform corn prices. The aggregate
+result, protocol and model-frame hashes, exact parameter, and pre-reveal commit
+are recorded in
+[`analysis/gefs_corn_holdout_report.md`](../analysis/gefs_corn_holdout_report.md).
 
 ## Locked comparisons
 
@@ -198,3 +211,5 @@ round of model or threshold search on GEFS.
 4. **Complete:** join to dated LSEG ZC decisions under the seven-hour cutoff.
 5. **Complete:** freeze folds, features, costs, and acceptance checks before
    inspecting multi-year model returns.
+6. **Complete:** commit the holdout evaluator, reveal 2026 once, and close the
+   failed specification without post-holdout tuning.

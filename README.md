@@ -34,11 +34,11 @@ The central result is a useful asymmetry:
   but the best pre-2024 candidate is effectively flat after estimated costs. A
   frost-curve pattern in three selected episodes reverses in the newly added
   2000–2011 history and fails its season-matched placebo test.
-- **Operational GEFS revisions clear their development gate.** A newly archived
-  2021–2025 point-in-time panel produces 42 non-overlapping dated-contract corn
-  trades with +42.0% aggregate net return and 1.57 Sharpe across three positive
-  test seasons. Candidate identity used only 2023–2024; 2025 remained positive.
-  This is preliminary until the sealed 2026 holdout is evaluated once.
+- **Operational GEFS revisions do not survive their sealed holdout.** The frozen
+  candidate looked strong in development (+42.0% net, 1.57 Sharpe), but lost
+  7.3% with −0.98 Sharpe across 14 non-overlapping 2026 trades. It also trailed
+  the matched market-only model and a fixed heat-minus-rain rule, so this bounded
+  avenue is closed rather than retuned.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -53,7 +53,7 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
-| Do operational weather-model revisions add information? | The locked GEFS development test passes, but its 2026 holdout remains sealed. | Operational 00 UTC ensemble-mean runs, exact archived timestamps, dated LSEG next-open labels, 2023–2025 expanding tests. |
+| Do operational weather-model revisions add information? | Not reliably: the locked GEFS candidate passed development but failed its one-time 2026 holdout. | Operational 00 UTC ensemble-mean runs, exact archived timestamps, dated LSEG next-open labels, 2023–2025 expanding tests, and a sealed 2026 assessment. |
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 | Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
@@ -271,6 +271,24 @@ The locked protocol and results are in
 and [`analysis/corn_wheat_final_validation_report.md`](analysis/corn_wheat_final_validation_report.md).
 
 Run: `PYTHONPATH=src python analysis/corn_wheat_final_validation.py`
+
+The final corn follow-up tests point-in-time operational GEFS revisions rather
+than published CPC categories. Candidate identity was selected using 2023–2024
+only; the resulting all-GEFS-plus-market shallow boosting model remained
+positive in the 2025 development confirmation and reached +42.0% net with 1.57
+Sharpe across the three development years. The code, model class, costs, and six
+holdout checks were committed before the one-time 2026 reveal.
+
+The sealed result did not replicate. The frozen candidate made 14
+non-overlapping trades, lost 7.3% after modeled costs, and recorded −0.98 Sharpe.
+The matched market-only model lost 6.7%, while the fixed heat-minus-rain rule
+gained 0.5%; doubled costs reduced the candidate result to −9.1%. Five of six
+predeclared checks failed. The result closes this GEFS specification and supports
+the broader conclusion that the retrospective development edge was unstable.
+Aggregate evidence and hashes are in
+[`analysis/gefs_corn_holdout_report.md`](analysis/gefs_corn_holdout_report.md),
+with construction details in
+[`docs/gefs_forecast_revisions.md`](docs/gefs_forecast_revisions.md).
 
 The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
 code to the expiry-ordered LSEG contract strip, and creates an ignored,
@@ -638,7 +656,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Fixed Coffee C frost-curve historical extension and season-matched null
 - [x] Operational GEFS index parser and backfill feasibility audit
 - [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
-- [x] Locked GEFS development validation with 2026 holdout still sealed
+- [x] Locked GEFS development validation and one-time sealed 2026 holdout
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
