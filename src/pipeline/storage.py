@@ -280,6 +280,8 @@ def _extension(url: str, body: bytes) -> str:
     Taken from the URL when it looks like a filename, otherwise sniffed as JSON,
     otherwise dropped. The sha is the identity; this is only for humans.
     """
+    if body.startswith(b"GRIB"):
+        return ".grib2"
     suffix = Path(urllib.parse.urlsplit(url).path).suffix
     if 1 < len(suffix) <= 8 and suffix[1:].isalnum():
         return suffix.lower()

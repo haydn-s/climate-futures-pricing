@@ -33,7 +33,7 @@ import importlib
 import json
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -296,6 +296,84 @@ def build_parser() -> argparse.ArgumentParser:
         "paper-status", parents=[_global_options()],
         help="summarize the immutable prospective paper ledger")
     paper_status.add_argument("--json", action="store_true", dest="output_json")
+
+    gefs_audit = commands.add_parser(
+        "gefs-audit", parents=[_global_options()],
+        help="sample operational GEFS indexes and estimate the forecast backfill")
+    gefs_audit.add_argument("--date", type=date.fromisoformat, required=True,
+                            help="operational run date (YYYY-MM-DD)")
+    gefs_audit.add_argument("--cycle", type=int, default=0,
+                            help="UTC model cycle (default: 0)")
+    gefs_audit.add_argument("--leads", nargs="+", default=None,
+                            help="forecast hours to sample (default: configured sample leads)")
+    gefs_audit.add_argument("--statistics", nargs="+", default=None,
+                            help="geavg and/or gespr (default: both)")
+    gefs_audit.add_argument(
+        "--through-hour", type=int, default=None,
+        help="estimate all six-hour leads through this hour (default: configured maximum)")
+    gefs_audit.add_argument("--json", action="store_true", dest="output_json")
+
+    gefs_download = commands.add_parser(
+        "gefs-download", parents=[_global_options()],
+        help="archive selected GRIB messages for one operational GEFS run")
+    gefs_download.add_argument("--date", type=date.fromisoformat, required=True,
+                               help="operational run date (YYYY-MM-DD)")
+    gefs_download.add_argument("--cycle", type=int, default=0,
+                               help="UTC model cycle (default: 0)")
+    gefs_download.add_argument("--leads", nargs="+", default=None,
+                               help="forecast hours (default: configured sample leads)")
+    gefs_download.add_argument(
+        "--through-hour", type=int, default=None,
+        help="download every six-hour lead through this hour instead of --leads")
+    gefs_download.add_argument("--statistics", nargs="+", default=["geavg"],
+                               help="geavg and/or gespr (default: geavg)")
+    gefs_download.add_argument("--force", action="store_true",
+                               help="re-fetch even when this run/lead is archived")
+    gefs_download.add_argument("--dry-run", action="store_true",
+                               help="audit indexes but download no GRIB payload")
+    gefs_download.add_argument("--json", action="store_true", dest="output_json")
+
+    gefs_backfill = commands.add_parser(
+        "gefs-backfill", parents=[_global_options()],
+        help="resume a bounded date range of operational GEFS runs")
+    gefs_backfill.add_argument("--start", type=date.fromisoformat, required=True,
+                               help="first operational run date (YYYY-MM-DD)")
+    gefs_backfill.add_argument("--end", type=date.fromisoformat, required=True,
+                               help="last operational run date, inclusive (YYYY-MM-DD)")
+    gefs_backfill.add_argument("--months", nargs="+", default=["5-8"],
+                               help="calendar months to retain (default: 5-8)")
+    gefs_backfill.add_argument("--cycle", type=int, default=0,
+                               help="UTC model cycle (default: 0)")
+    gefs_backfill.add_argument(
+        "--through-hour", type=int, default=240,
+        help="download every six-hour lead through this hour (default: 240)")
+    gefs_backfill.add_argument("--statistics", nargs="+", default=["geavg"],
+                               help="geavg and/or gespr (default: geavg)")
+    gefs_backfill.add_argument("--force", action="store_true",
+                               help="re-fetch selections already in the manifest")
+    gefs_backfill.add_argument("--dry-run", action="store_true",
+                               help="list dates and estimated archive scope without network access")
+
+    gefs_features = commands.add_parser(
+        "gefs-features", parents=[_global_options()],
+        help="build complete daily GEFS level and revision features")
+    gefs_features.add_argument("--input", default="gefs_corn_point_forecast",
+                               help="decoded processed table name")
+    gefs_features.add_argument("--out", default="gefs_corn_revisions",
+                               help="output processed table name")
+    gefs_features.add_argument("--dry-run", action="store_true")
+
+    gefs_model_frame = commands.add_parser(
+        "gefs-model-frame", parents=[_global_options()],
+        help="join GEFS revisions to prior LSEG controls and next-open ZC labels")
+    gefs_model_frame.add_argument("--revisions", default="gefs_corn_revisions",
+                                  help="processed GEFS revision table")
+    gefs_model_frame.add_argument("--contracts", default="futures_contracts",
+                                  help="processed dated LSEG contract table")
+    gefs_model_frame.add_argument("--out", default="gefs_corn_model_frame",
+                                  help="output processed table name")
+    gefs_model_frame.add_argument("--holding-sessions", type=int, default=5)
+    gefs_model_frame.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -932,6 +1010,325 @@ def show_paper_status(args: argparse.Namespace, raw: RawStore) -> int:
     return 0
 
 
+def audit_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec]) -> int:
+    """Probe small GEFS indexes; no GRIB payload is downloaded or written."""
+    from .gefs_archive import GefsArchiveError, run_audit
+    from .http import FetchError
+
+    spec = _spec(sources, "gefs_forecast")
+    try:
+        leads = _int_list(
+            args.leads or [str(value) for value in spec.params["sample_leads"]],
+            "leads", 1, int(spec.params["max_forecast_hour"]),
+        )
+        statistics = tuple(args.statistics or spec.params["statistics"])
+        report = run_audit(
+            spec, args.date, args.cycle, leads, statistics,
+            through_hour=args.through_hour,
+        )
+    except (FetchError, GefsArchiveError, OSError, ValueError) as exc:
+        print(f"GEFS audit error: {exc}", file=sys.stderr)
+        return 1
+    if args.output_json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        mebibyte = 1024 * 1024
+        print(
+            f"GEFS {report['operational_run']}: {report['sample_indexes']} indexes, "
+            f"{len(report['sample_leads'])} sampled leads"
+        )
+        print(f"  sampled transfer: {report['sample_transfer_bytes'] / mebibyte:.1f} MiB")
+        print(
+            f"  estimated through f{report['estimate_through_hour']:03d}: "
+            f"{report['estimated_transfer_bytes_per_run'] / mebibyte:.1f} MiB"
+        )
+        print(
+            "  selected-field fraction: "
+            f"{report['estimated_selected_bytes_per_run'] / mebibyte:.1f} MiB before "
+            "range coalescing"
+        )
+        print(
+            f"  estimated range requests: {report['estimated_range_requests_per_run']}"
+        )
+        print(
+            "  latest sampled publication: "
+            f"{report['latest_sample_last_modified'] or 'header unavailable'}"
+        )
+        statuses = ", ".join(
+            f"{name}={count}"
+            for name, count in report["archive_timestamp_status_counts"].items()
+        )
+        print(f"  archive timestamps: {statuses}")
+        print(
+            "  modeling cutoff: initialization + "
+            f"{report['conservative_availability_hours']}h"
+        )
+        print("  GRIB payload downloaded: 0 bytes; archive changed: no")
+    return 0
+
+
+def build_gefs_features(args: argparse.Namespace, processed: ProcessedStore) -> int:
+    from .features.gefs_revisions import GefsFeatureError, build_revision_features
+
+    try:
+        points = processed.read(args.input)
+        features = build_revision_features(points)
+    except (FileNotFoundError, GefsFeatureError, OSError, ValueError) as exc:
+        print(f"GEFS feature error: {exc}", file=sys.stderr)
+        return 1
+    if features.empty:
+        print(
+            "GEFS feature error: no run has complete six-hour coverage through day 10",
+            file=sys.stderr,
+        )
+        return 1
+    revisions = int(features["has_prior_day_revision"].sum())
+    print(
+        f"GEFS revisions: {len(features)} complete run(s), {revisions} with an exact "
+        f"prior-day comparison, {len(features.columns)} columns"
+    )
+    if args.dry_run:
+        print(f"  would write {processed.path(args.out)}")
+        return 0
+    path = processed.write(args.out, features)
+    print(f"wrote {path}")
+    return 0
+
+
+def build_gefs_model_frame(args: argparse.Namespace, processed: ProcessedStore) -> int:
+    import pandas as pd
+
+    from .gefs_model import GefsModelError, build_execution_frame
+
+    try:
+        revisions = processed.read(args.revisions)
+        contracts = processed.read(args.contracts)
+        frame = build_execution_frame(
+            revisions, contracts, holding_sessions=args.holding_sessions
+        )
+    except (FileNotFoundError, GefsModelError, OSError, ValueError) as exc:
+        print(f"GEFS model-frame error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"GEFS model frame: {len(frame)} decision(s), "
+        f"{frame['date'].min().date()} through {frame['date'].max().date()}"
+    )
+    print(
+        "  controls through "
+        f"{pd.Timestamp(frame['market_data_through'].max()).date()}; "
+        "entry is strictly after every model date"
+    )
+    if args.dry_run:
+        print(f"  would write {processed.path(args.out)}")
+        return 0
+    path = processed.write(args.out, frame)
+    print(f"wrote {path}")
+    return 0
+
+
+def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
+                  raw: RawStore) -> int:
+    """Archive a bounded GEFS sample, preserving intraday availability metadata."""
+    from .gefs_archive import GefsArchiveError, audit_index, data_url, download_grib
+    from .http import FetchError
+
+    spec = _spec(sources, "gefs_forecast")
+    try:
+        leads = _gefs_leads(args, spec)
+        statistics = tuple(args.statistics)
+        initialized = datetime(
+            args.date.year, args.date.month, args.date.day, args.cycle,
+            tzinfo=timezone.utc,
+        )
+        available_at = initialized + timedelta(
+            hours=int(spec.params["conservative_availability_hours"])
+        )
+        records = []
+        planned = []
+        for statistic in statistics:
+            for lead in leads:
+                key = f"{initialized:%Y%m%d}/{initialized:%H}/{statistic}/f{lead:03d}"
+                existing = raw.latest(spec.name, key)
+                if (not args.dry_run and not args.force and existing is not None
+                        and existing.path.exists()):
+                    planned.append({
+                        "key": key,
+                        "lead_hours": lead,
+                        "statistic": statistic,
+                        "ranges": 0,
+                        "transfer_bytes": 0,
+                        "status": "already_archived",
+                    })
+                    continue
+                audit = audit_index(spec, initialized, statistic, lead)
+                item = {
+                    "key": key,
+                    "lead_hours": lead,
+                    "statistic": statistic,
+                    "ranges": len(audit.ranges),
+                    "transfer_bytes": audit.transfer_bytes,
+                    "status": "planned",
+                }
+                planned.append(item)
+                if args.dry_run:
+                    continue
+                body, headers = download_grib(audit)
+                archive_modified = audit.last_modified.isoformat() if audit.last_modified else None
+                record = raw.save(
+                    spec.name,
+                    key,
+                    body,
+                    url=data_url(audit.url),
+                    params={
+                        "initialized_at": initialized.isoformat(),
+                        "model_available_at": available_at.isoformat(),
+                        "lead_hours": lead,
+                        "statistic": statistic,
+                        "selectors": list(spec.params["selectors"]),
+                        "ranges": [
+                            {"start": value.start, "end": value.end,
+                             "header": value.header}
+                            for value in audit.ranges
+                        ],
+                        "archive_last_modified": archive_modified,
+                        "archive_timestamp_status": audit.archive_timestamp_status,
+                        "response_etags": sorted({
+                            str(header.get("etag")) for header in headers
+                            if header.get("etag")
+                        }),
+                    },
+                    publication_date=available_at.date(),
+                    version_stamp=archive_modified,
+                )
+                records.append(record)
+                item["status"] = "archived"
+                item["sha256"] = record.sha256
+                item["bytes"] = record.bytes
+    except (FetchError, GefsArchiveError, OSError, ValueError) as exc:
+        print(f"GEFS download error: {exc}", file=sys.stderr)
+        return 1
+
+    report = {
+        "operational_run": initialized.isoformat(),
+        "model_available_at": available_at.isoformat(),
+        "dry_run": bool(args.dry_run),
+        "items": planned,
+        "archived": len(records),
+        "planned_transfer_bytes": sum(item["transfer_bytes"] for item in planned),
+    }
+    if getattr(args, "output_json", False):
+        print(json.dumps(report, indent=2, sort_keys=True))
+    elif not getattr(args, "quiet", False):
+        verb = "would download" if args.dry_run else "archived"
+        count = len(planned) if args.dry_run else len(records)
+        print(f"GEFS {initialized.isoformat()}: {verb} {count} of {len(planned)} selections")
+        print(f"  model available at: {available_at.isoformat()}")
+        print(f"  planned transfer: {report['planned_transfer_bytes'] / 1048576:.1f} MiB")
+        for item in planned:
+            print(
+                f"  {item['key']:31s} {item['status']:16s} "
+                f"{item['transfer_bytes'] / 1048576:6.2f} MiB"
+            )
+        print("  orders submitted: 0")
+    return 0
+
+
+def _gefs_leads(args: argparse.Namespace, spec: SourceSpec) -> tuple[int, ...]:
+    """Resolve one mutually exclusive GEFS lead selection."""
+    from .gefs_archive import GefsArchiveError
+
+    leads_arg = getattr(args, "leads", None)
+    through_hour = getattr(args, "through_hour", None)
+    if leads_arg and through_hour is not None:
+        raise GefsArchiveError("use either --leads or --through-hour, not both")
+    if through_hour is not None:
+        step = int(spec.params["forecast_step_hours"])
+        maximum = int(spec.params["max_forecast_hour"])
+        if through_hour <= 0 or through_hour > maximum or through_hour % step:
+            raise GefsArchiveError(
+                f"--through-hour must be a positive {step}-hour step through {maximum}"
+            )
+        return tuple(range(step, through_hour + 1, step))
+    return _int_list(
+        leads_arg or [str(value) for value in spec.params["sample_leads"]],
+        "leads", 1, int(spec.params["max_forecast_hour"]),
+    )
+
+
+def _gefs_backfill_dates(start: date, end: date,
+                         months: Iterable[int]) -> tuple[date, ...]:
+    if end < start:
+        raise ValueError("--end cannot precede --start")
+    wanted = set(months)
+    dates: list[date] = []
+    current = start
+    while current <= end:
+        if current.month in wanted:
+            dates.append(current)
+        current += timedelta(days=1)
+    if not dates:
+        raise ValueError("the requested date range contains none of --months")
+    return tuple(dates)
+
+
+def backfill_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
+                  raw: RawStore) -> int:
+    """Resume the predeclared seasonal GEFS archive without hiding failed dates."""
+    try:
+        months = _int_list(args.months, "months", 1, 12)
+        dates = _gefs_backfill_dates(args.start, args.end, months)
+        spec = _spec(sources, "gefs_forecast")
+        leads = _gefs_leads(args, spec)
+    except (ValueError, SystemExit) as exc:
+        print(f"GEFS backfill error: {exc}", file=sys.stderr)
+        return 1
+
+    selections = len(dates) * len(leads) * len(args.statistics)
+    if args.dry_run:
+        first, last = dates[0], dates[-1]
+        print(
+            f"GEFS backfill dry run: {len(dates)} run date(s), {first} through {last}, "
+            f"months {','.join(map(str, months))}"
+        )
+        print(
+            f"  {len(leads)} lead(s) x {len(args.statistics)} statistic(s) = "
+            f"{selections:,} archive selection(s)"
+        )
+        print("  network requests: 0; archive changed: no")
+        return 0
+
+    failed: list[date] = []
+    for number, run_date in enumerate(dates, start=1):
+        child = argparse.Namespace(
+            date=run_date,
+            cycle=args.cycle,
+            leads=None,
+            through_hour=args.through_hour,
+            statistics=args.statistics,
+            force=args.force,
+            dry_run=False,
+            output_json=False,
+            quiet=True,
+        )
+        if download_gefs(child, sources, raw):
+            failed.append(run_date)
+        if number == 1 or number == len(dates) or number % 25 == 0:
+            print(
+                f"GEFS backfill progress: {number}/{len(dates)} run date(s), "
+                f"{len(failed)} failed"
+            )
+    if failed:
+        rendered = ", ".join(value.isoformat() for value in failed[:10])
+        suffix = " ..." if len(failed) > 10 else ""
+        print(
+            f"GEFS backfill incomplete: {len(failed)} failed date(s): "
+            f"{rendered}{suffix}", file=sys.stderr,
+        )
+        return 1
+    print(f"GEFS backfill complete: {len(dates)} run date(s), 0 failed")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.data_root) if args.data_root else default_data_root()
@@ -965,6 +1362,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             return resolve_paper_signals(args, raw)
         if args.command == "paper-status":
             return show_paper_status(args, raw)
+        if args.command == "gefs-audit":
+            return audit_gefs(args, sources)
+        if args.command == "gefs-download":
+            return download_gefs(args, sources, raw)
+        if args.command == "gefs-backfill":
+            return backfill_gefs(args, sources, raw)
+        if args.command == "gefs-features":
+            return build_gefs_features(args, processed)
+        if args.command == "gefs-model-frame":
+            return build_gefs_model_frame(args, processed)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)

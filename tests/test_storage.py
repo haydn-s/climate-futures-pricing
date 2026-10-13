@@ -156,6 +156,15 @@ def test_a_nested_key_becomes_nested_directories(store: RawStore) -> None:
     assert store.keys("usdm") == ["IA/2012"]
 
 
+def test_grib_magic_gets_a_readable_extension_even_with_a_forecast_url_suffix(
+        store: RawStore) -> None:
+    record = store.save(
+        "gefs_forecast", "20261001/00/geavg/f024", b"GRIBpayload7777",
+        url="https://example.test/geavg.t00z.pgrb2a.0p50.f024",
+    )
+    assert record.path.suffix == ".grib2"
+
+
 def test_a_key_cannot_escape_the_store(store: RawStore) -> None:
     for bad in ("../evil", "/absolute", "", "has space", "..", "a//b"):
         with pytest.raises(ValueError, match="not usable as a path"):

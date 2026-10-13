@@ -477,6 +477,7 @@ Important remaining threats:
 | NOAA nClimGrid-Daily | Daily county temperature and precipitation | 2000–present; US crop belts | Monthly finalization, unavailable intramonth |
 | US Drought Monitor | Weekly county drought coverage | 2000–present | Thursday release for Tuesday map |
 | CPC Outlooks | 6–10 and 8–14 day temperature/precipitation probabilities | 2012–present | Issuance date; known before valid weather |
+| NOAA operational GEFS | Ensemble forecast temperature and precipitation revisions | GEFS v12, 2020-09-23 onward; bounded experiment uses May-August 2021-2026 | 00 UTC initialization + 7 hours; later archive republications excluded |
 | Yahoo Finance | Corn, soy, wheat, coffee, cocoa, orange juice, and CORN fund closes | 2000–present where available | Session close |
 | Our World in Data / FAO | Annual yield and production | Crop-dependent | Excluded from point-in-time return features |
 | USDA NASS Quick Stats | County crop production for future weighting | Module and synthetic tests only | Requires `NASS_API_KEY`; live behavior unverified |
@@ -498,6 +499,8 @@ offline and writes `data/processed/*.parquet`; point-in-time tables retain a
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# Needed only to decode operational GEFS GRIB2 files:
+pip install -r requirements-gefs.txt
 ```
 
 The current suite is exercised on Python 3.14 with pandas 3.0 and NumPy 2.5.
@@ -555,6 +558,14 @@ PYTHONPATH=src python -m pipeline fetch --source usdm --states IA --years 2012
 PYTHONPATH=src python -m pipeline clean --source usdm
 PYTHONPATH=src python -m pipeline features --crop corn --peek 0 --growing-season
 PYTHONPATH=src python -m pipeline signal --dry-run
+PYTHONPATH=src python -m pipeline gefs-audit --date 2026-10-01
+PYTHONPATH=src python -m pipeline gefs-download \
+  --date 2024-07-15 --through-hour 240
+PYTHONPATH=src python -m pipeline gefs-backfill \
+  --start 2021-05-01 --end 2026-08-31 --dry-run
+PYTHONPATH=src python -m pipeline clean --source gefs_forecast
+PYTHONPATH=src python -m pipeline gefs-features
+PYTHONPATH=src python -m pipeline gefs-model-frame
 PYTHONPATH=src python -m pipeline futures-workspace-download \
   --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
 PYTHONPATH=src python analysis/lseg_signal_replay.py
@@ -568,7 +579,19 @@ PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
 
-`fetch --source nclimgrid` with no scope downloads county-wide files because NCEI
+`gefs-audit` downloads only small source indexes, verifies that the configured
+corn-weather messages exist, and estimates the eventual byte-range transfer. It
+does not download or decode GRIB data. `gefs-download` archives exact audited
+GRIB byte ranges for one run; `gefs-backfill` resumes the locked May-August date
+scope and skips complete selections without contacting NOAA. Cleaning decodes
+the five configured Corn Belt points and excludes files whose archive timestamp
+cannot establish same-day operational availability. `gefs-features` requires
+all four six-hour intervals and all five points before producing days 1-3, 4-7,
+and 8-10 level and prior-day revision features. The bounded design, point-in-time
+rule, locked validation protocol, and acceptance gate are in
+[`docs/gefs_forecast_revisions.md`](docs/gefs_forecast_revisions.md).
+`fetch --source nclimgrid` with no scope
+downloads county-wide files because NCEI
 provides no geographic subset. Use `--dry-run` and narrow years or months when
 probing a source.
 
@@ -587,7 +610,7 @@ reproduce.py             resumable end-to-end workflow
 
 ## Current status
 
-- [x] Content-addressed, publication-aware pipeline for six populated public sources
+- [x] Content-addressed, publication-aware public-data pipeline
 - [x] County and point weather, drought, price, yield, and CPC forecast features
 - [x] Corn yield validation with honest trend fitting
 - [x] Daily and weekly forward return backtests
@@ -606,6 +629,8 @@ reproduce.py             resumable end-to-end workflow
 - [x] Fixed-specification cocoa uncertainty, null, baseline, and double-cost validation
 - [x] Preliminary execution-aligned Coffee C outright, curve, and frost comparison
 - [x] Fixed Coffee C frost-curve historical extension and season-matched null
+- [x] Operational GEFS index parser and backfill feasibility audit
+- [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights

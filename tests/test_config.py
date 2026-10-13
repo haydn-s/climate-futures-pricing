@@ -62,7 +62,7 @@ def minimal_source(**overrides: str) -> str:
 def test_every_configured_source_loads(repo_root: Path) -> None:
     sources = load_sources(repo_root / SOURCES)
     assert set(sources) == {"nclimgrid", "nasa_power", "usdm", "yahoo_prices", "owid_yields",
-                            "cpc_outlook", "nass_production"}
+                            "cpc_outlook", "gefs_forecast", "nass_production"}
     for name, spec in sources.items():
         assert spec.name == name
         assert spec.kind in SOURCE_KINDS
@@ -72,8 +72,8 @@ def test_every_configured_source_loads(repo_root: Path) -> None:
 def test_only_nass_needs_a_key_and_it_says_where_to_get_one(repo_root: Path) -> None:
     sources = load_sources(repo_root / SOURCES)
     keyless = [name for name, spec in sources.items() if not spec.needs_key]
-    assert sorted(keyless) == ["cpc_outlook", "nasa_power", "nclimgrid", "owid_yields",
-                               "usdm", "yahoo_prices"]
+    assert sorted(keyless) == ["cpc_outlook", "gefs_forecast", "nasa_power", "nclimgrid",
+                               "owid_yields", "usdm", "yahoo_prices"]
 
     nass = sources["nass_production"]
     assert nass.api_key_env == "NASS_API_KEY"

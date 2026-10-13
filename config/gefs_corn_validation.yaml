@@ -1,0 +1,83 @@
+schema_version: 1
+protocol_id: gefs-corn-revisions-v1
+locked_on: 2026-10-12
+
+purpose: >-
+  Test whether point-in-time operational GEFS forecast revisions improve a
+  dated-contract corn model beyond market-only controls. Failure closes this
+  bounded avenue rather than triggering post-result feature search.
+
+sample:
+  operational_runs: NOAA GEFS v12 00 UTC geavg
+  start_date: 2021-05-01
+  end_date: 2026-08-31
+  months: [5, 6, 7, 8]
+  availability_cutoff_hours: 7
+  archive_timestamp_status: plausible_operational_upload
+  exact_prior_day_revision_required: true
+  duplicate_entry_sessions: keep latest model available before that session open
+
+information_boundary:
+  outer_test_years: [2023, 2024, 2025]
+  first_outer_training_year: 2021
+  untouched_holdout_year: 2026
+  holdout_used_for_selection_or_gate: false
+  inner_validation_fraction: 0.20
+  target_embargo_sessions: 5
+
+execution:
+  source: dated LSEG ZC contracts
+  entry: first dated session open strictly after the 07 UTC cutoff
+  holding_sessions_after_entry: 5
+  overlap: prohibited
+  roll_business_days: 10
+  commission_usd_per_contract_side: 2.50
+  slippage_ticks_per_contract_side: 1.0
+  cost_sensitivity_multipliers: [1.0, 2.0]
+
+feature_sets:
+  market_only: market
+  absolute_plus_market: [market, absolute_gefs]
+  revision_plus_market: [market, revision_gefs]
+  all_gefs_plus_market: [market, absolute_gefs, revision_gefs]
+
+models:
+  ridge:
+    alpha: [0.1, 1.0, 10.0]
+    action_rule: predicted_return_exceeds_training_median_cost
+  logistic:
+    C: [0.1, 1.0, 10.0]
+    minimum_probability: [0.55]
+  shallow_boosting:
+    learning_rate: [0.03, 0.10]
+    max_leaf_nodes: [7, 15]
+    max_iter: [100]
+    action_rule: predicted_return_exceeds_training_median_cost
+
+simple_revision_rule:
+  score: rev_d1_3_heat_dd29_sum - 0.1 * rev_d1_3_precip_mm_sum
+  action: BUY for positive score, SELL for negative score, HOLD for zero
+  fitted_parameters: none
+
+placebos:
+  - shift revision features forward one operational day within year
+  - shift revision features backward one operational day within year
+  - replace prior-session controls with same-date settlement as a labeled leakage diagnostic
+
+acceptance_gate:
+  minimum_development_trades: 30
+  must_improve_on_same_model_market_only_net: true
+  must_improve_on_same_model_market_only_sharpe: true
+  positive_net_at_base_cost: true
+  positive_net_at_double_cost: true
+  minimum_positive_outer_folds: 2
+  minimum_positive_calendar_years: 2
+  minimum_year_block_probability_positive: 0.80
+  must_beat_simple_revision_rule_net: true
+  both_one_day_shift_placebos_must_underperform: true
+  same_day_settlement_diagnostic_excluded_from_claims: true
+
+reporting:
+  inspect_untouched_holdout_only_after_development_gate_is_final: true
+  orders_authorized: false
+  row_level_lseg_data_committed: false

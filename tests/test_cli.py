@@ -29,7 +29,7 @@ import pytest
 import pandas as pd
 
 from pipeline import cli
-from pipeline.cli import _int_list, _states, build_parser, main
+from pipeline.cli import _gefs_backfill_dates, _int_list, _states, build_parser, main
 
 
 # ------------------------------------------------------------------- arguments
@@ -106,6 +106,88 @@ def test_signal_command_parses_as_of_and_never_implies_execution() -> None:
     assert args.as_of == date(2026, 9, 24)
     assert args.dry_run is True
     assert args.output_json is True
+
+
+def test_gefs_audit_parses_an_explicit_operational_run() -> None:
+    args = build_parser().parse_args([
+        "gefs-audit", "--date", "2026-10-01", "--cycle", "0",
+        "--leads", "24", "120", "--statistics", "geavg", "gespr",
+        "--through-hour", "240", "--json",
+    ])
+    assert args.command == "gefs-audit"
+    assert args.date == date(2026, 10, 1)
+    assert args.cycle == 0
+    assert args.leads == ["24", "120"]
+    assert args.statistics == ["geavg", "gespr"]
+    assert args.through_hour == 240
+    assert args.output_json is True
+
+
+def test_gefs_download_defaults_to_mean_and_can_be_a_nonmutating_dry_run() -> None:
+    args = build_parser().parse_args([
+        "gefs-download", "--date", "2026-10-01", "--leads", "24", "--dry-run",
+    ])
+    assert args.command == "gefs-download"
+    assert args.statistics == ["geavg"]
+    assert args.leads == ["24"]
+    assert args.dry_run is True
+
+
+def test_gefs_download_can_request_a_complete_bounded_horizon() -> None:
+    args = build_parser().parse_args([
+        "gefs-download", "--date", "2026-10-01", "--through-hour", "240",
+    ])
+    assert args.through_hour == 240
+    assert args.leads is None
+
+
+def test_gefs_backfill_defaults_to_the_locked_season_and_horizon() -> None:
+    args = build_parser().parse_args([
+        "gefs-backfill", "--start", "2021-05-01", "--end", "2026-08-31",
+        "--dry-run",
+    ])
+    assert args.command == "gefs-backfill"
+    assert args.months == ["5-8"]
+    assert args.through_hour == 240
+    assert args.statistics == ["geavg"]
+    assert args.dry_run is True
+
+
+def test_gefs_backfill_dates_are_inclusive_and_month_bounded() -> None:
+    dates = _gefs_backfill_dates(
+        date(2024, 4, 30), date(2024, 9, 1), (5, 8)
+    )
+    assert dates[0] == date(2024, 5, 1)
+    assert dates[-1] == date(2024, 8, 31)
+    assert {value.month for value in dates} == {5, 8}
+
+
+def test_gefs_backfill_dry_run_is_network_free(tmp_path: Path, no_network, capsys) -> None:
+    result = main([
+        "gefs-backfill", "--start", "2024-05-01", "--end", "2024-08-31",
+        "--dry-run", "--data-root", str(tmp_path),
+    ])
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "123 run date(s)" in output
+    assert "4,920 archive selection(s)" in output
+    assert "network requests: 0" in output
+
+
+def test_gefs_feature_command_has_stable_table_defaults() -> None:
+    args = build_parser().parse_args(["gefs-features", "--dry-run"])
+    assert args.input == "gefs_corn_point_forecast"
+    assert args.out == "gefs_corn_revisions"
+    assert args.dry_run is True
+
+
+def test_gefs_model_frame_has_locked_execution_defaults() -> None:
+    args = build_parser().parse_args(["gefs-model-frame", "--dry-run"])
+    assert args.revisions == "gefs_corn_revisions"
+    assert args.contracts == "futures_contracts"
+    assert args.out == "gefs_corn_model_frame"
+    assert args.holding_sessions == 5
+    assert args.dry_run is True
 
 
 def test_futures_commands_parse_without_implying_a_vendor() -> None:

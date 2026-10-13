@@ -29,6 +29,7 @@ from pipeline.http import (
     USER_AGENT,
     FetchError,
     fetch,
+    fetch_range,
     fetch_with_headers,
     parse_last_modified,
     redact_url,
@@ -139,6 +140,31 @@ def test_one_source_can_override_the_agent_without_changing_the_others(monkeypat
     seen = _serve(monkeypatch, FakeResponse(b"{}"))
     fetch("https://example.test/x", user_agent="Mozilla/5.0")
     assert seen[0].get_header("User-agent") == "Mozilla/5.0"
+
+
+def test_a_byte_range_is_explicit_and_must_be_honored(monkeypatch) -> None:
+    seen = _serve(monkeypatch, FakeResponse(
+        b"GRIB", status=206, headers={"Content-Range": "bytes 10-13/100"}
+    ))
+    body, headers = fetch_range("https://example.test/file", 10, 13)
+    assert body == b"GRIB"
+    assert headers["content-range"] == "bytes 10-13/100"
+    assert seen[0].get_header("Range") == "bytes=10-13"
+
+
+def test_a_server_ignoring_the_range_is_rejected_before_a_large_download_is_accepted(
+        monkeypatch) -> None:
+    _serve(monkeypatch, FakeResponse(b"the whole object", status=200))
+    with pytest.raises(FetchError, match="did not honor byte range"):
+        fetch_range("https://example.test/file", 10, 13)
+
+
+def test_a_truncated_range_is_rejected(monkeypatch) -> None:
+    _serve(monkeypatch, FakeResponse(
+        b"GRI", status=206, headers={"Content-Range": "bytes 10-13/100"}
+    ))
+    with pytest.raises(FetchError, match="returned 3 bytes, expected 4"):
+        fetch_range("https://example.test/file", 10, 13)
 
 
 def test_a_404_is_not_retried_because_it_is_an_answer(monkeypatch) -> None:
