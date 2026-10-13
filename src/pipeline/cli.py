@@ -378,6 +378,15 @@ def build_parser() -> argparse.ArgumentParser:
                                   help="output processed table name")
     gefs_model_frame.add_argument("--holding-sessions", type=int, default=5)
     gefs_model_frame.add_argument("--dry-run", action="store_true")
+
+    crop_progress_features = commands.add_parser(
+        "crop-progress-features", parents=[_global_options()],
+        help="build release-time national corn condition and progress features")
+    crop_progress_features.add_argument("--input", default="nass_crop_progress_weekly",
+                                        help="cleaned long Crop Progress table")
+    crop_progress_features.add_argument("--out", default="nass_corn_progress_features",
+                                        help="output processed table name")
+    crop_progress_features.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -1130,6 +1139,32 @@ def build_gefs_model_frame(args: argparse.Namespace, processed: ProcessedStore) 
     return 0
 
 
+def build_crop_progress_features(args: argparse.Namespace,
+                                 processed: ProcessedStore) -> int:
+    from .features.crop_progress import (
+        CropProgressFeatureError,
+        build_crop_progress_features as build,
+    )
+
+    try:
+        observations = processed.read(args.input)
+        features = build(observations)
+    except (FileNotFoundError, CropProgressFeatureError, OSError, ValueError) as exc:
+        print(f"Crop Progress feature error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"Crop Progress features: {len(features)} release(s), "
+        f"{features['release_date'].min().date()} through "
+        f"{features['release_date'].max().date()}, {len(features.columns)} columns"
+    )
+    if args.dry_run:
+        print(f"  would write {processed.path(args.out)}")
+        return 0
+    path = processed.write(args.out, features)
+    print(f"wrote {path}")
+    return 0
+
+
 def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
                   raw: RawStore) -> int:
     """Archive a bounded GEFS sample, preserving intraday availability metadata."""
@@ -1417,6 +1452,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return build_gefs_features(args, processed)
         if args.command == "gefs-model-frame":
             return build_gefs_model_frame(args, processed)
+        if args.command == "crop-progress-features":
+            return build_crop_progress_features(args, processed)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)

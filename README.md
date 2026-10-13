@@ -502,6 +502,7 @@ Important remaining threats:
 | US Drought Monitor | Weekly county drought coverage | 2000–present | Thursday release for Tuesday map |
 | CPC Outlooks | 6–10 and 8–14 day temperature/precipitation probabilities | 2012–present | Issuance date; known before valid weather |
 | NOAA operational GEFS | Ensemble forecast temperature and precipitation revisions | GEFS v12, 2020-09-23 onward; bounded experiment uses May-August 2021-2026 | 00 UTC initialization + 7 hours; later archive republications excluded |
+| USDA NASS ESMIS Crop Progress | Original weekly corn progress and condition releases | 2012-2026 bounded archive; 488 corn-bearing releases through 2026-10-05 | Exact catalog release date at 4:00 p.m. Eastern; next session only |
 | Yahoo Finance | Corn, soy, wheat, coffee, cocoa, orange juice, and CORN fund closes | 2000–present where available | Session close |
 | Our World in Data / FAO | Annual yield and production | Crop-dependent | Excluded from point-in-time return features |
 | USDA NASS Quick Stats | County crop production for future weighting | Module and synthetic tests only | Requires `NASS_API_KEY`; live behavior unverified |
@@ -657,6 +658,8 @@ reproduce.py             resumable end-to-end workflow
 - [x] Operational GEFS index parser and backfill feasibility audit
 - [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
 - [x] Locked GEFS development validation and one-time sealed 2026 holdout
+- [x] Point-in-time USDA Crop Progress archive, parser, and fixed release features
+- [ ] Locked dated-contract USDA Crop Progress model validation
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights

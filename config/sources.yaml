@@ -574,3 +574,35 @@ sources:
       anything point-in-time. Everything about this entry beyond the key
       requirement is unverified by live probe; it is a starting point, not a
       finding.
+
+  nass_crop_progress:
+    kind: text
+    url_template: "https://esmis.nal.usda.gov/publication/crop-progress?page={page}"
+    accept: text/plain
+    params:
+      first_year: 1995
+      default_start_year: 2012
+      release_time_eastern: "16:00"
+      publication_slug: crop-progress
+    publication_lag_days: null
+    notes: |
+      USDA NASS Crop Progress original weekly text releases, discovered from the
+      keyless ESMIS archive. The bounded corn study defaults to 2012 onward to
+      match the complete dated LSEG ZC history, although the publication archive
+      reaches further back.
+
+      These report files are the point-in-time evidence. Each carries its own
+      release date and the exact previous-week, previous-year, and five-year
+      comparisons published at that time. Do not replace them with a current
+      Quick Stats query: later database revisions would weaken the information
+      boundary. NASS releases the report at 4:00 p.m. Eastern on the first
+      business day of the week, so any trade must use the next dated-contract
+      session open; Monday holidays normally move release to Tuesday.
+
+      ESMIS has migrated hosts and file paths. Discovery follows catalog links
+      rather than guessing filenames, validates the USDA/Cornell host, checks
+      the release date inside every body against the catalog, and archives the
+      bytes and hash under the release date. A dash in a table is zero; (NA) is
+      missing. The national condition aggregate must sum to 100 when all five
+      categories exist; source-published state discrepancies are retained with
+      an explicit quality flag.
