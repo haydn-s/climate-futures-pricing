@@ -48,6 +48,8 @@ def test_lseg_ric_uses_archive_decade_and_live_forms() -> None:
     assert lseg_ric("CC", "Z", 2012, as_of=as_of) == "CCZ2^1"
     assert lseg_ric("CC", "Z", 2024, as_of=as_of) == "CCZ4^2"
     assert lseg_ric("CC", "Z", 2026, as_of=as_of) == "CCZ6"
+    assert lseg_ric("KC", "N", 2021, as_of=as_of) == "KCN1^2"
+    assert lseg_ric("KC", "Z", 2026, as_of=as_of) == "KCZ6"
 
 
 def test_contract_requests_have_stable_canonical_symbols() -> None:
@@ -64,9 +66,18 @@ def test_cocoa_requests_use_ice_rics_and_stable_contracts() -> None:
     assert requests[-1] == ContractRequest("CC", 2024, "Z", "CCZ24", "CCZ4^2")
 
 
+def test_coffee_requests_use_ice_rics_and_stable_contracts() -> None:
+    requests = contract_requests([2024], ["KC"], as_of=date(2026, 1, 1))
+    assert len(requests) == 5
+    assert requests[0] == ContractRequest("KC", 2024, "H", "KCH24", "KCH4^2")
+    assert requests[-1] == ContractRequest("KC", 2024, "Z", "KCZ24", "KCZ4^2")
+
+
 def test_different_quote_units_must_be_downloaded_separately() -> None:
     with pytest.raises(WorkspaceFuturesError, match="quote units"):
         contract_requests([2024], ["ZC", "CC"], as_of=date(2026, 1, 1))
+    with pytest.raises(WorkspaceFuturesError, match="quote units"):
+        contract_requests([2024], ["ZC", "KC"], as_of=date(2026, 1, 1))
 
 
 def test_normalize_history_parses_expiry_and_records_incomplete_rows() -> None:
@@ -146,3 +157,16 @@ def test_cocoa_mapping_converts_lseg_dollars_per_tonne_to_cents(tmp_path: Path) 
     payload = __import__("yaml").safe_load(mapping.read_text(encoding="utf-8"))
     assert payload["root_values"] == {"CC": "CC"}
     assert payload["price_multiplier_to_cents"] == 100.0
+
+
+def test_coffee_mapping_retains_lseg_cents_per_pound(tmp_path: Path) -> None:
+    fake = FakeLseg()
+    download = download_workspace_history(
+        start=date(2024, 11, 1), end=date(2024, 11, 8),
+        delivery_years=[2024], roots=["KC"], lseg=fake,
+        as_of=date(2026, 10, 12),
+    )
+    _, _, mapping = save_workspace_download(download, tmp_path, stem="kc_daily")
+    payload = __import__("yaml").safe_load(mapping.read_text(encoding="utf-8"))
+    assert payload["root_values"] == {"KC": "KC"}
+    assert payload["price_multiplier_to_cents"] == 1.0

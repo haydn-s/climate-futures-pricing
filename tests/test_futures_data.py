@@ -152,6 +152,26 @@ def test_cocoa_only_panel_is_audited_without_requiring_grain_roots() -> None:
     assert any(issue.code == "MISSING_MARGIN" for issue in report.issues)
 
 
+def test_coffee_only_panel_uses_five_cent_tick_audit() -> None:
+    frame = pd.DataFrame({
+        "date": pd.to_datetime(["2026-01-02", "2026-01-05"]),
+        "root": ["KC", "KC"],
+        "contract": ["KCH26", "KCH26"],
+        "last_trade_date": pd.to_datetime(["2026-03-18", "2026-03-18"]),
+        "open_cents": [300.00, 301.05],
+        "high_cents": [302.00, 303.05],
+        "low_cents": [299.00, 300.05],
+        "settlement_cents": [301.00, 302.05],
+        "volume": [1000, 1100],
+        "open_interest": [5000, 4900],
+    })
+    report = audit_contract_panel(frame)
+    assert report.pricing_valid
+    assert report.roots == ("KC",)
+    assert not any(issue.code == "OFF_TICK_PRICE" for issue in report.issues)
+    assert any(issue.code == "MISSING_MARGIN" for issue in report.issues)
+
+
 def test_import_manifest_hashes_inputs_and_preserves_license_note(tmp_path: Path) -> None:
     source = tmp_path / "contracts.csv"
     vendor_frame().to_csv(source, index=False)

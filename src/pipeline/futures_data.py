@@ -68,8 +68,11 @@ class ImportSpec:
             raise FuturesDataError("source_name and license_note must be non-empty")
         if not np.isfinite(self.price_multiplier_to_cents) or self.price_multiplier_to_cents <= 0:
             raise FuturesDataError("price_multiplier_to_cents must be positive")
-        if not self.root_values or set(self.root_values.values()) - {"ZC", "ZW", "CC"}:
-            raise FuturesDataError("root_values must map vendor values only to ZC, ZW, or CC")
+        supported = {"ZC", "ZW", "CC", "KC"}
+        if not self.root_values or set(self.root_values.values()) - supported:
+            raise FuturesDataError(
+                "root_values must map vendor values only to ZC, ZW, CC, or KC"
+            )
 
 
 @dataclass(frozen=True)
@@ -307,10 +310,14 @@ def audit_contract_panel(
 
     if specs is None:
         specs = dict(load_execution_config().contracts)
-        # Cocoa is not part of the corn/wheat spread executor, but its exchange
-        # mechanics are sufficient for unit, tick, and contract-code auditing.
+        # ICE softs are not part of the corn/wheat spread executor, but their
+        # exchange mechanics are sufficient for unit, tick, and code auditing.
         specs["CC"] = AuditContractSpec(
             tick_size_cents=100.0,
+            listed_month_codes=("H", "K", "N", "U", "Z"),
+        )
+        specs["KC"] = AuditContractSpec(
+            tick_size_cents=0.05,
             listed_month_codes=("H", "K", "N", "U", "Z"),
         )
     issues: list[AuditIssue] = []
