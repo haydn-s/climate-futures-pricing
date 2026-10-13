@@ -13,6 +13,7 @@ from pipeline.gefs_validation import (
     REVISION_FEATURES,
     apply_no_overlap,
     evaluate_development,
+    evaluate_holdout,
     load_protocol,
     outer_year_folds,
 )
@@ -81,3 +82,14 @@ def test_development_evaluation_never_scores_the_2026_holdout() -> None:
     assert bundle.simple_rule.folds == 3
     assert bundle.placebo_forward.folds == 3
     assert bundle.placebo_backward.folds == 3
+
+
+def test_holdout_scores_only_2026_after_the_headline_is_frozen() -> None:
+    frame = model_frame()
+    development = evaluate_development(frame)
+    holdout = evaluate_holdout(frame, headline=development.headline)
+    assert set(holdout.predictions["year"]) == {2026}
+    assert holdout.headline == development.headline
+    assert holdout.headline_metrics.years == 1
+    assert holdout.market_metrics.years == 1
+    assert holdout.simple_rule_metrics.years == 1

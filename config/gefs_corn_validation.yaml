@@ -84,6 +84,14 @@ uncertainty:
   seed: 590
   bootstrap_unit: calendar year
 
+holdout_assessment:
+  minimum_trades: 10
+  positive_net_at_base_cost: true
+  positive_net_at_double_cost: true
+  must_improve_on_same_model_market_only_net: true
+  must_improve_on_same_model_market_only_sharpe: true
+  must_beat_simple_revision_rule_net: true
+
 reporting:
   inspect_untouched_holdout_only_after_development_gate_is_final: true
   orders_authorized: false

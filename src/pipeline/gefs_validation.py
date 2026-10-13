@@ -74,6 +74,19 @@ class ValidationBundle:
     gate_failures: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class HoldoutBundle:
+    headline: str
+    headline_metrics: Metrics
+    market_metrics: Metrics
+    simple_rule_metrics: Metrics
+    predictions: pd.DataFrame
+    parameter: str
+    double_cost_total_net: float
+    passes_assessment: bool
+    assessment_failures: tuple[str, ...]
+
+
 def load_protocol(path: str | Path = DEFAULT_PROTOCOL) -> dict:
     try:
         payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
@@ -125,7 +138,7 @@ def apply_no_overlap(frame: pd.DataFrame, signals: np.ndarray) -> np.ndarray:
     return output
 
 
-def _validate_frame(frame: pd.DataFrame) -> pd.DataFrame:
+def _validate_frame(frame: pd.DataFrame, *, include_holdout: bool = False) -> pd.DataFrame:
     required = {
         "date", "year", "entry_date", "exit_date", TARGET, COST,
         *FEATURE_SETS["all_gefs_plus_market"],
@@ -149,12 +162,17 @@ def _validate_frame(frame: pd.DataFrame) -> pd.DataFrame:
         raise GefsValidationError("GEFS exits must follow their entries")
     if (clean[COST] <= 0).any():
         raise GefsValidationError("GEFS execution costs must be positive")
-    clean = clean[clean["year"] < UNTOUCHED_HOLDOUT_YEAR].reset_index(drop=True)
+    if not include_holdout:
+        clean = clean[clean["year"] < UNTOUCHED_HOLDOUT_YEAR].reset_index(drop=True)
     missing_years = sorted(set(OUTER_TEST_YEARS) - set(clean["year"].astype(int)))
     if missing_years:
         raise GefsValidationError(
             "development frame is incomplete; missing locked test year(s): "
             + ", ".join(map(str, missing_years))
+        )
+    if include_holdout and UNTOUCHED_HOLDOUT_YEAR not in set(clean["year"].astype(int)):
+        raise GefsValidationError(
+            f"model frame has no sealed {UNTOUCHED_HOLDOUT_YEAR} holdout rows"
         )
     return clean
 
@@ -355,24 +373,29 @@ def evaluate_simple_rule(frame: pd.DataFrame) -> ValidationResult:
     rows = []
     for fold, (_, test_index) in enumerate(outer_year_folds(frame), start=1):
         test = frame.loc[test_index].reset_index(drop=True)
-        score = (
-            test["rev_d1_3_heat_dd29_sum"].to_numpy(dtype="float64")
-            - 0.1 * test["rev_d1_3_precip_mm_sum"].to_numpy(dtype="float64")
-        )
-        raw = np.sign(score).astype("int64")
-        signals = apply_no_overlap(test, raw)
-        gross = test[TARGET].to_numpy(dtype="float64")
-        costs = test[COST].to_numpy(dtype="float64")
-        rows.append(pd.DataFrame({
-            "date": test["date"], "year": test["year"].astype(int),
-            "entry_date": test["entry_date"], "exit_date": test["exit_date"],
-            "gross": gross, "cost": costs, "score": score,
-            "raw_signal": raw, "signal": signals,
-            "net": _net(gross, costs, signals), "fold": fold,
-            "parameter": "fixed_heat_minus_rain",
-        }))
+        rows.append(_simple_rule_rows(test, fold=fold))
     predictions = pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
     return ValidationResult("revision_rule", "fixed_rule", metrics(predictions), predictions)
+
+
+def _simple_rule_rows(test: pd.DataFrame, *, fold: int) -> pd.DataFrame:
+    score = (
+        test["rev_d1_3_heat_dd29_sum"].to_numpy(dtype="float64")
+        - 0.1 * test["rev_d1_3_precip_mm_sum"].to_numpy(dtype="float64")
+    )
+    raw = np.sign(score).astype("int64")
+    signals = apply_no_overlap(test.reset_index(drop=True), raw)
+    gross = test[TARGET].to_numpy(dtype="float64")
+    costs = test[COST].to_numpy(dtype="float64")
+    return pd.DataFrame({
+        "date": test["date"].to_numpy(), "year": test["year"].astype(int).to_numpy(),
+        "entry_date": test["entry_date"].to_numpy(),
+        "exit_date": test["exit_date"].to_numpy(),
+        "gross": gross, "cost": costs, "score": score,
+        "raw_signal": raw, "signal": signals,
+        "net": _net(gross, costs, signals), "fold": fold,
+        "parameter": "fixed_heat_minus_rain",
+    })
 
 
 def shifted_revisions(frame: pd.DataFrame, periods: int) -> pd.DataFrame:
@@ -497,4 +520,76 @@ def evaluate_development(frame: pd.DataFrame, *, protocol: dict | None = None
         year_block_probability_positive=probability,
         passes_gate=not failures,
         gate_failures=failures,
+    )
+
+
+def evaluate_holdout(frame: pd.DataFrame, *, headline: str,
+                     protocol: dict | None = None) -> HoldoutBundle:
+    """Score the frozen headline on 2026 exactly once, with no reselection."""
+    protocol = protocol or load_protocol()
+    full = _validate_frame(frame, include_holdout=True)
+    matches = [model for model in MODELS if headline.endswith(f"_{model}")]
+    if len(matches) != 1:
+        raise GefsValidationError(f"cannot parse frozen headline {headline!r}")
+    model = matches[0]
+    feature_set = headline[:-(len(model) + 1)]
+    if feature_set not in FEATURE_SETS or feature_set == "market_only":
+        raise GefsValidationError(f"invalid frozen GEFS feature set {feature_set!r}")
+
+    train = full[full["year"] < UNTOUCHED_HOLDOUT_YEAR].reset_index(drop=True)
+    test = full[full["year"] == UNTOUCHED_HOLDOUT_YEAR].reset_index(drop=True)
+    params = _select_params(
+        train, features=FEATURE_SETS[feature_set], model=model, protocol=protocol
+    )
+    predictions = _model_rows(
+        train, test, features=FEATURE_SETS[feature_set], model=model,
+        params=params, fold=len(OUTER_TEST_YEARS) + 1,
+    )
+    market_params = _select_params(
+        train, features=FEATURE_SETS["market_only"], model=model, protocol=protocol
+    )
+    market_predictions = _model_rows(
+        train, test, features=FEATURE_SETS["market_only"], model=model,
+        params=market_params, fold=len(OUTER_TEST_YEARS) + 1,
+    )
+    rule_predictions = _simple_rule_rows(test, fold=len(OUTER_TEST_YEARS) + 1)
+    headline_metrics = metrics(predictions)
+    market_metrics = metrics(market_predictions)
+    rule_metrics = metrics(rule_predictions)
+    double_cost_total = float(_net(
+        predictions["gross"].to_numpy(dtype="float64"),
+        predictions["cost"].to_numpy(dtype="float64"),
+        predictions["signal"].to_numpy(dtype="int64"),
+        cost_multiplier=2.0,
+    ).sum())
+    gate = protocol["holdout_assessment"]
+    checks = {
+        f"at least {gate['minimum_trades']} holdout trades": (
+            headline_metrics.trades >= int(gate["minimum_trades"])
+        ),
+        "positive holdout net": headline_metrics.total_net > 0,
+        "positive holdout net at doubled costs": double_cost_total > 0,
+        "improves on market-only holdout net": (
+            headline_metrics.total_net > market_metrics.total_net
+        ),
+        "improves on market-only holdout Sharpe": (
+            np.isfinite(headline_metrics.sharpe)
+            and (not np.isfinite(market_metrics.sharpe)
+                 or headline_metrics.sharpe > market_metrics.sharpe)
+        ),
+        "beats fixed revision rule holdout net": (
+            headline_metrics.total_net > rule_metrics.total_net
+        ),
+    }
+    failures = tuple(label for label, passed in checks.items() if not passed)
+    return HoldoutBundle(
+        headline=headline,
+        headline_metrics=headline_metrics,
+        market_metrics=market_metrics,
+        simple_rule_metrics=rule_metrics,
+        predictions=predictions,
+        parameter=predictions["parameter"].iloc[0],
+        double_cost_total_net=double_cost_total,
+        passes_assessment=not failures,
+        assessment_failures=failures,
     )
