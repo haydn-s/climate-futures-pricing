@@ -34,6 +34,16 @@ The central result is a useful asymmetry:
   but the best pre-2024 candidate is effectively flat after estimated costs. A
   frost-curve pattern in three selected episodes reverses in the newly added
   2000–2011 history and fails its season-matched placebo test.
+- **Operational GEFS revisions do not survive their sealed holdout.** The frozen
+  candidate looked strong in development (+42.0% net, 1.57 Sharpe), but lost
+  7.3% with −0.98 Sharpe across 14 non-overlapping 2026 trades. It also trailed
+  the matched market-only model and a fixed heat-minus-rain rule, so this bounded
+  avenue is closed rather than retuned.
+- **Scheduled USDA Crop Progress releases do not rescue the corn signal.** The
+  locked development headline lost 52.7% after modeled costs with −0.81 Sharpe
+  across 131 non-overlapping trades. It failed seven predeclared checks, so the
+  model-specific 2026 holdout remains sealed rather than becoming another
+  opportunity to retune.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -48,6 +58,8 @@ repeatable return forecast.
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
+| Do operational weather-model revisions add information? | Not reliably: the locked GEFS candidate passed development but failed its one-time 2026 holdout. | Operational 00 UTC ensemble-mean runs, exact archived timestamps, dated LSEG next-open labels, 2023–2025 expanding tests, and a sealed 2026 assessment. |
+| Do scheduled USDA Crop Progress releases add information? | Not in the locked test: the selected progress-plus-market model was negative, unstable across years, and weaker than both timing placebos. | Original point-in-time USDA releases, dated LSEG next-open labels, nested 2017–2025 outer tests, costs, fixed-rule and one-release-shift controls; 2026 remains sealed. |
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 | Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
@@ -266,6 +278,38 @@ and [`analysis/corn_wheat_final_validation_report.md`](analysis/corn_wheat_final
 
 Run: `PYTHONPATH=src python analysis/corn_wheat_final_validation.py`
 
+The final corn follow-up tests point-in-time operational GEFS revisions rather
+than published CPC categories. Candidate identity was selected using 2023–2024
+only; the resulting all-GEFS-plus-market shallow boosting model remained
+positive in the 2025 development confirmation and reached +42.0% net with 1.57
+Sharpe across the three development years. The code, model class, costs, and six
+holdout checks were committed before the one-time 2026 reveal.
+
+The sealed result did not replicate. The frozen candidate made 14
+non-overlapping trades, lost 7.3% after modeled costs, and recorded −0.98 Sharpe.
+The matched market-only model lost 6.7%, while the fixed heat-minus-rain rule
+gained 0.5%; doubled costs reduced the candidate result to −9.1%. Five of six
+predeclared checks failed. The result closes this GEFS specification and supports
+the broader conclusion that the retrospective development edge was unstable.
+Aggregate evidence and hashes are in
+[`analysis/gefs_corn_holdout_report.md`](analysis/gefs_corn_holdout_report.md),
+with construction details in
+[`docs/gefs_forecast_revisions.md`](docs/gefs_forecast_revisions.md).
+
+The final scheduled-release test uses the original USDA Crop Progress reports
+available at 4:00 p.m. Eastern, then maps each release to the first later dated
+LSEG corn open. Candidate identity was selected only from 2017–2023 outer
+predictions, with 2024–2025 reserved as final development confirmation years.
+The selected progress-plus-market logistic model made 131 non-overlapping
+development trades, lost 52.7% after costs, and recorded −0.81 Sharpe. It was
+positive in only three of nine years and three of nine outer folds; doubled
+costs reduced the result to −70.9%, and both one-release timing placebos did
+better. Seven gate checks failed, so the predeclared process did not inspect the
+model-specific 2026 holdout. The aggregate result is in
+[`analysis/nass_corn_progress_validation_report.md`](analysis/nass_corn_progress_validation_report.md),
+with construction details in
+[`docs/crop_progress_releases.md`](docs/crop_progress_releases.md).
+
 The dated-margin layer parses CME's public corn and wheat PDFs, maps each roll
 code to the expiry-ordered LSEG contract strip, and creates an ignored,
 execution-ready panel. All 28,387 contract rows inside the public window match
@@ -477,6 +521,8 @@ Important remaining threats:
 | NOAA nClimGrid-Daily | Daily county temperature and precipitation | 2000–present; US crop belts | Monthly finalization, unavailable intramonth |
 | US Drought Monitor | Weekly county drought coverage | 2000–present | Thursday release for Tuesday map |
 | CPC Outlooks | 6–10 and 8–14 day temperature/precipitation probabilities | 2012–present | Issuance date; known before valid weather |
+| NOAA operational GEFS | Ensemble forecast temperature and precipitation revisions | GEFS v12, 2020-09-23 onward; bounded experiment uses May-August 2021-2026 | 00 UTC initialization + 7 hours; later archive republications excluded |
+| USDA NASS ESMIS Crop Progress | Original weekly corn progress and condition releases | 2012-2026 bounded archive; 488 corn-bearing releases through 2026-10-05 | Exact catalog release date at 4:00 p.m. Eastern; next session only |
 | Yahoo Finance | Corn, soy, wheat, coffee, cocoa, orange juice, and CORN fund closes | 2000–present where available | Session close |
 | Our World in Data / FAO | Annual yield and production | Crop-dependent | Excluded from point-in-time return features |
 | USDA NASS Quick Stats | County crop production for future weighting | Module and synthetic tests only | Requires `NASS_API_KEY`; live behavior unverified |
@@ -498,6 +544,8 @@ offline and writes `data/processed/*.parquet`; point-in-time tables retain a
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# Needed only to decode operational GEFS GRIB2 files:
+pip install -r requirements-gefs.txt
 ```
 
 The current suite is exercised on Python 3.14 with pandas 3.0 and NumPy 2.5.
@@ -555,6 +603,15 @@ PYTHONPATH=src python -m pipeline fetch --source usdm --states IA --years 2012
 PYTHONPATH=src python -m pipeline clean --source usdm
 PYTHONPATH=src python -m pipeline features --crop corn --peek 0 --growing-season
 PYTHONPATH=src python -m pipeline signal --dry-run
+PYTHONPATH=src python -m pipeline gefs-audit --date 2026-10-01
+PYTHONPATH=src python -m pipeline gefs-download \
+  --date 2024-07-15 --through-hour 240
+PYTHONPATH=src python -m pipeline gefs-backfill \
+  --start 2021-05-01 --end 2026-08-31 --dry-run
+PYTHONPATH=src python -m pipeline clean --source gefs_forecast
+PYTHONPATH=src python -m pipeline gefs-features
+PYTHONPATH=src python -m pipeline gefs-model-frame
+PYTHONPATH=src python analysis/gefs_corn_validation.py
 PYTHONPATH=src python -m pipeline futures-workspace-download \
   --start 2024-01-01 --end 2024-12-31 --delivery-years 2024 --dry-run
 PYTHONPATH=src python analysis/lseg_signal_replay.py
@@ -568,7 +625,19 @@ PYTHONPATH=src python -m pipeline status
 python -m pytest tests -q
 ```
 
-`fetch --source nclimgrid` with no scope downloads county-wide files because NCEI
+`gefs-audit` downloads only small source indexes, verifies that the configured
+corn-weather messages exist, and estimates the eventual byte-range transfer. It
+does not download or decode GRIB data. `gefs-download` archives exact audited
+GRIB byte ranges for one run; `gefs-backfill` resumes the locked May-August date
+scope and skips complete selections without contacting NOAA. Cleaning decodes
+the five configured Corn Belt points and excludes files whose archive timestamp
+cannot establish same-day operational availability. `gefs-features` requires
+all four six-hour intervals and all five points before producing days 1-3, 4-7,
+and 8-10 level and prior-day revision features. The bounded design, point-in-time
+rule, locked validation protocol, and acceptance gate are in
+[`docs/gefs_forecast_revisions.md`](docs/gefs_forecast_revisions.md).
+`fetch --source nclimgrid` with no scope
+downloads county-wide files because NCEI
 provides no geographic subset. Use `--dry-run` and narrow years or months when
 probing a source.
 
@@ -587,7 +656,7 @@ reproduce.py             resumable end-to-end workflow
 
 ## Current status
 
-- [x] Content-addressed, publication-aware pipeline for six populated public sources
+- [x] Content-addressed, publication-aware public-data pipeline
 - [x] County and point weather, drought, price, yield, and CPC forecast features
 - [x] Corn yield validation with honest trend fitting
 - [x] Daily and weekly forward return backtests
@@ -606,6 +675,12 @@ reproduce.py             resumable end-to-end workflow
 - [x] Fixed-specification cocoa uncertainty, null, baseline, and double-cost validation
 - [x] Preliminary execution-aligned Coffee C outright, curve, and frost comparison
 - [x] Fixed Coffee C frost-curve historical extension and season-matched null
+- [x] Operational GEFS index parser and backfill feasibility audit
+- [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
+- [x] Locked GEFS development validation and one-time sealed 2026 holdout
+- [x] Point-in-time USDA Crop Progress archive, parser, and fixed release features
+- [x] Locked dated-contract USDA Crop Progress execution frame and validation protocol
+- [x] USDA Crop Progress development evaluation; gate failed and 2026 stayed sealed
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights

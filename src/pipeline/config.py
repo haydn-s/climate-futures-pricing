@@ -36,9 +36,11 @@ DEFAULT_DOTENV_PATH = ".env"
 
 SCHEMA_VERSION = 1
 # "zip" is a binary payload -- a zipped ESRI shapefile set, for cpc_outlook.
-# It is listed here so a kind typo still fails loudly; nothing in this module
+# "text" covers source-owned indexes such as GEFS's GRIB2 byte inventory; the
+# indexed payload can still be binary without pretending the index itself is.
+# They are listed here so a kind typo still fails loudly; nothing in this module
 # decodes a payload, so adding one needs no parsing change here.
-SOURCE_KINDS = frozenset({"csv", "json", "zip"})
+SOURCE_KINDS = frozenset({"csv", "json", "text", "zip"})
 
 _SOURCE_REQUIRED = ("kind", "url_template", "params", "publication_lag_days", "notes")
 _SOURCE_OPTIONAL = ("accept", "api_key_env", "api_key_signup_url")

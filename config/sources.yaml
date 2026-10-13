@@ -474,6 +474,70 @@ sources:
       from config/geography.yaml. Reading the pair as (lat, lon) puts the corn
       belt in the Indian Ocean and silently matches nothing.
 
+  gefs_forecast:
+    kind: text
+    url_template: "https://noaa-gefs-pds.s3.amazonaws.com/gefs.{date}/{cycle:02d}/atmos/pgrb2ap5/{statistic}.t{cycle:02d}z.pgrb2a.0p50.f{lead:03d}.idx"
+    accept: text/plain
+    params:
+      operational_from: "2020-09-23T12:00:00+00:00"
+      cycles: [0, 6, 12, 18]
+      decision_cycle: 0
+      statistics: [geavg, gespr]
+      forecast_step_hours: 6
+      max_forecast_hour: 360
+      conservative_availability_hours: 7
+      sample_leads: [24, 120, 240, 360]
+      selectors:
+        - {variable: TMAX, level: "2 m above ground"}
+        - {variable: TMIN, level: "2 m above ground"}
+        - {variable: APCP, level: surface}
+      # Combining nearby messages trades a modest number of unneeded wind bytes
+      # for far fewer HTTP range requests. The feasibility command reports both.
+      coalesce_gap_bytes: 600000
+      corn_belt_bbox:
+        left_lon: -105.0
+        right_lon: -80.0
+        top_lat: 50.0
+        bottom_lat: 35.0
+    publication_lag_days: null
+    notes: |
+      NOAA's operational GEFS v12 archive on the Registry of Open Data in AWS.
+      Version 12 entered operations with the 12 UTC cycle on 2020-09-23 and
+      runs at 00, 06, 12 and 18 UTC. This entry points to each GRIB2 file's
+      plain-text `.idx` inventory, not to a reforecast or a reconstructed
+      historical forecast. The corresponding data URL is the same path without
+      `.idx`.
+
+      `geavg` and `gespr` are NOAA's precomputed ensemble mean and spread. Using
+      them makes the initial question much smaller than downloading 31 members,
+      while preserving the two quantities in the predeclared experiment:
+      expected weather and forecast disagreement. TMAX, TMIN and APCP are the
+      minimum agronomic fields. At six-hour output, daily rain and temperature
+      extremes require four consecutive lead files; a single f024 record is not
+      a daily aggregate.
+
+      The index exposes exact GRIB message byte offsets. The feasibility command
+      selects the configured fields, combines adjacent ranges when doing so is
+      cheaper than another request, and measures the required transfer before
+      any large backfill. It also reads each object's Last-Modified timestamp,
+      but that header is archive evidence rather than universally the original
+      dissemination time. The first v12 cycle from 2020-09-23 was re-uploaded in
+      April 2021, while sampled 2021, 2024 and 2026 cycles were written about
+      6.2-6.4 hours after initialization. The audit labels an upload after the
+      seven-hour cutoff as late and a delay over 24 hours as an archive
+      republication instead of silently treating either as market time.
+
+      The initial experiment uses only the 00 UTC cycle and makes a decision no
+      earlier than initialization plus seven hours, which is conservative to the
+      same-day samples and still precedes the US futures session. Files absent by
+      that cutoff must be skipped. publication_lag_days is null because this is
+      an intraday rule, not a daily lag.
+
+      Reforecasts are intentionally excluded. They are useful for climatology
+      and bias correction, but they were generated retrospectively and are not
+      the forecast vintages traders actually received. Mixing them into the
+      operational archive would invalidate the point-in-time claim.
+
   nass_production:
     kind: json
     url_template: "https://quickstats.nass.usda.gov/api/api_GET/?key={key}&source_desc={source_desc}&sector_desc={sector_desc}&commodity_desc={commodity_desc}&statisticcat_desc={statisticcat_desc}&agg_level_desc={agg_level_desc}&state_alpha={state_alpha}&year={year}&format={format}"
@@ -510,3 +574,35 @@ sources:
       anything point-in-time. Everything about this entry beyond the key
       requirement is unverified by live probe; it is a starting point, not a
       finding.
+
+  nass_crop_progress:
+    kind: text
+    url_template: "https://esmis.nal.usda.gov/publication/crop-progress?page={page}"
+    accept: text/plain
+    params:
+      first_year: 1995
+      default_start_year: 2012
+      release_time_eastern: "16:00"
+      publication_slug: crop-progress
+    publication_lag_days: null
+    notes: |
+      USDA NASS Crop Progress original weekly text releases, discovered from the
+      keyless ESMIS archive. The bounded corn study defaults to 2012 onward to
+      match the complete dated LSEG ZC history, although the publication archive
+      reaches further back.
+
+      These report files are the point-in-time evidence. Each carries its own
+      release date and the exact previous-week, previous-year, and five-year
+      comparisons published at that time. Do not replace them with a current
+      Quick Stats query: later database revisions would weaken the information
+      boundary. NASS releases the report at 4:00 p.m. Eastern on the first
+      business day of the week, so any trade must use the next dated-contract
+      session open; Monday holidays normally move release to Tuesday.
+
+      ESMIS has migrated hosts and file paths. Discovery follows catalog links
+      rather than guessing filenames, validates the USDA/Cornell host, checks
+      the release date inside every body against the catalog, and archives the
+      bytes and hash under the release date. A dash in a table is zero; (NA) is
+      missing. The national condition aggregate must sum to 100 when all five
+      categories exist; source-published state discrepancies are retained with
+      an explicit quality flag.

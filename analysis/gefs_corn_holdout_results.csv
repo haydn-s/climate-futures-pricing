@@ -1,0 +1,4 @@
+specification,observations,trades,hit_rate,mean_net_per_trade,total_net,sharpe,max_drawdown,positive_folds,folds,positive_years,years,double_cost_total_net,passes_assessment,assessment_failures
+all_gefs_plus_market_shallow_boosting,84,14,0.42857142857142855,-0.005183192502118362,-0.07256469502965708,-0.9759052314131497,-0.1220406237298205,0,1,0,1,-0.09119613874772378,False,positive holdout net | positive holdout net at doubled costs | improves on market-only holdout net | improves on market-only holdout Sharpe | beats fixed revision rule holdout net
+market_only_shallow_boosting,84,14,0.5714285714285714,-0.00480423976302112,-0.0672593566822957,-0.8330151323715765,-0.15853447282622835,0,1,0,1,,False,
+fixed_heat_minus_rain,84,14,0.5,0.00036482398041930847,0.005107535725870305,0.07082885464374752,-0.08211888999365469,1,1,1,1,,False,

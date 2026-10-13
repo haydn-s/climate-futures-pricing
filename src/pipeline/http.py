@@ -93,6 +93,7 @@ def fetch(url: str, *, accept: str | None = None, timeout: int = 120, retries: i
 
 def fetch_with_headers(url: str, *, accept: str | None = None, timeout: int = 120,
                        retries: int = 3, user_agent: str | None = None,
+                       request_headers: Mapping[str, str] | None = None,
                        sleep: Callable[[float], None] = time.sleep) -> tuple[bytes, dict[str, str]]:
     """Fetch a URL, returning its body and its response headers (keys lower-cased).
 
@@ -102,7 +103,7 @@ def fetch_with_headers(url: str, *, accept: str | None = None, timeout: int = 12
     project agent for the one source that rejects it (Yahoo); `sleep` is
     injectable so a test can exercise the backoff without waiting.
     """
-    headers = {"User-Agent": user_agent or USER_AGENT}
+    headers = {"User-Agent": user_agent or USER_AGENT, **dict(request_headers or {})}
     if accept:
         headers["Accept"] = accept
     request = urllib.request.Request(url, headers=headers)
@@ -134,3 +135,39 @@ def fetch_with_headers(url: str, *, accept: str | None = None, timeout: int = 12
         sleep(BACKOFF_SECONDS * 2 ** attempt)
 
     raise FetchError(f"no attempt was made for {redact_url(url)}", url=url)  # unreachable
+
+
+def fetch_range(url: str, start: int, end: int, *, accept: str | None = None,
+                timeout: int = 120, retries: int = 3) -> tuple[bytes, dict[str, str]]:
+    """Fetch one inclusive HTTP byte range and reject a server that ignores it.
+
+    GEFS files are tens of megabytes and their source-owned index identifies the
+    few messages this project needs. Silently accepting a full-object ``200``
+    would turn a bounded backfill into hundreds of gigabytes, so both the
+    Content-Range header and returned length are part of the contract.
+    """
+    if start < 0 or end < start:
+        raise ValueError(f"invalid byte range {start}-{end}")
+    expected = f"bytes {start}-{end}/"
+    body, headers = fetch_with_headers(
+        url,
+        accept=accept,
+        timeout=timeout,
+        retries=retries,
+        request_headers={"Range": f"bytes={start}-{end}"},
+    )
+    content_range = headers.get("content-range", "")
+    if not content_range.startswith(expected):
+        raise FetchError(
+            f"server did not honor byte range {start}-{end}: "
+            f"Content-Range={content_range!r} for {redact_url(url)}",
+            url=url,
+        )
+    wanted = end - start + 1
+    if len(body) != wanted:
+        raise FetchError(
+            f"byte range {start}-{end} returned {len(body)} bytes, expected {wanted}, "
+            f"for {redact_url(url)}",
+            url=url,
+        )
+    return body, headers

@@ -1,0 +1,4 @@
+# Optional operational GEFS GRIB2 decoding.
+# 2.45/2.46 omitted the binary-library dependency on macOS/Linux; 2.44 declares
+# eccodeslib and works on the project's Python 3.14 setup (native library 2.49).
+eccodes==2.44.0
