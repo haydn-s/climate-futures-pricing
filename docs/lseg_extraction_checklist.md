@@ -5,9 +5,9 @@ local Workspace session. It does not require Datastream Web Service (DSWS)
 credentials and does not store a username, password, app key, or token.
 
 This route was verified on October 12, 2026. The desktop session opened
-successfully and returned expired CBOT corn, Chicago wheat, and ICE-US cocoa
-contracts with daily open, high, low, settlement, volume, open interest, and
-expiration. The adapter is `pipeline.lseg_workspace_futures`.
+successfully and returned expired CBOT corn, Chicago wheat, ICE-US cocoa, and
+ICE-US Coffee C contracts with daily open, high, low, settlement, volume, open
+interest, and expiration. The adapter is `pipeline.lseg_workspace_futures`.
 
 ## 1. Install the optional client
 
@@ -43,6 +43,12 @@ ICE-US cocoa has a different convention. The discovery chain is `0#CC:` and
 shows constituents such as `/CCZ6`, but the history endpoint accepts `CCZ6`
 without the slash. Cocoa retains one-digit years: December 2024 is `CCZ4^2`,
 not `CCZ24^2`. The adapter records the stable canonical contract as `CCZ24`.
+
+ICE-US Coffee C uses the same one-digit year convention but the `KC` root.
+Workspace history accepts `KCZ6` for December 2026 and `KCN1^2` for archived
+July 2021; `KCN21^2` and the leading-slash form are invalid. LSEG quotes Coffee
+C directly in US cents per pound. The generated canonical identifier is stable,
+for example `KCN21`.
 
 ## 3. Download and validate a narrow sample
 
@@ -122,6 +128,29 @@ requested contracts. It is pricing-valid but not execution-ready because dated
 ICE maintenance margin has not yet been attached. The preliminary model may use
 the dated opens and explicit commission/slippage; a capital-constrained replay
 must wait for authoritative margin history.
+
+## 4b. Download the Coffee C model window separately
+
+Coffee C is quoted in US cents per pound. Keep it in its own export so its unit
+and license boundary remain explicit.
+
+```bash
+PYTHONPATH=src python -m pipeline futures-workspace-download \
+  --start 2000-01-01 --delivery-years 2000-2026 \
+  --roots KC --stem kc_daily
+
+PYTHONPATH=src python -m pipeline futures-import \
+  --input data/raw/lseg_workspace/kc_daily.csv \
+  --mapping data/raw/lseg_workspace/kc_daily.mapping.yaml \
+  --out coffee_futures_contracts
+```
+
+The verified October 12, 2026 pull contains 57,091 valid price rows from all 135
+requested contracts, covering January 3, 2000 through October 12, 2026. It is
+pricing-valid but not execution-ready because dated ICE maintenance margin has
+not yet been attached. The original model baseline remains explicitly bounded
+to the 75 delivery-year 2012–2026 contracts so the historical extension cannot
+silently change its already observed ranking.
 
 ## 5. Attach CME dated margin separately
 

@@ -1,0 +1,59 @@
+schema_version: 1
+protocol_id: coffee-frost-curve-validation-v1
+locked_on: 2026-10-12
+
+purpose: >-
+  Give the only suggestive coffee result one bounded test: whether a published
+  Brazilian frost is followed by a positive 20-session ICE Coffee C
+  nearby-minus-deferred return after exact estimated costs.
+
+selection_disclosure:
+  rule_selected_after_reviewing: 2012-2023
+  selected_pattern: three of three development frost episodes had positive net curve returns
+  consumed_diagnostic_start_year: 2024
+  neither_selected_nor_consumed_period_can_confirm_rule: true
+
+new_historical_extension:
+  start_date: 2000-01-01
+  end_date: 2011-12-31
+  source: dated LSEG ICE-US KC contracts not used in the initial model round
+  role: bounded historical extension, not prospective evidence
+
+event:
+  geography: minimum daily temperature across Sul de Minas, Cerrado Mineiro, and Mogiana
+  threshold_c: 4.0
+  season_months: [6, 7, 8]
+  availability: NASA POWER publication date
+  episode_spacing_calendar_days: 10
+
+trade:
+  direction: long nearby and short deferred
+  decision: first ICE session on or after publication
+  entry: next shared open
+  exit: open twenty shared sessions after entry
+  roll_business_days: 25
+  commission_usd_per_contract_side: 2.50
+  slippage_ticks_per_contract_side: 1.0
+  tick_value_usd: 18.75
+  costs: exact row-specific estimated two-leg rate
+
+null:
+  draws: 10000
+  random_seed: 590
+  method: >-
+    For each observed event, sample a non-frost June-August decision from the
+    same calendar year, excluding ten calendar days around any frost day; compare
+    the observed mean net curve return with the distribution of sampled means.
+
+evidence_gate_for_new_extension:
+  minimum_eligible_events: 5
+  minimum_mean_net_return: 0.0
+  minimum_median_net_return: 0.0
+  minimum_positive_event_fraction: 0.70
+  maximum_season_matched_null_p_value: 0.10
+
+interpretation:
+  promotion_allowed: false
+  reason: retrospective rule selected from an already observed pattern
+  next_if_gate_passes: prospective paper observation without parameter changes
+  next_if_gate_fails: close coffee as suggestive but operationally unsupported

@@ -58,6 +58,11 @@ PRODUCTS = {
     # USD per metric tonne.
     "CC": WorkspaceProduct("CC", LISTED_MONTHS, None, 100.0,
                            "US dollars per metric tonne"),
+    # Verified against the signed-in Workspace history endpoint on 2026-10-12.
+    # ICE-US Coffee C uses one-digit live and archived years: KCZ6 is December
+    # 2026 and KCN1^2 is July 2021. Prices are already US cents per pound.
+    "KC": WorkspaceProduct("KC", LISTED_MONTHS, None, 1.0,
+                           "US cents per pound"),
 }
 HISTORY_FIELDS = (
     "OPEN_PRC",
@@ -174,11 +179,14 @@ def contract_requests(
     unknown = sorted(set(selected_roots) - set(PRODUCTS))
     if unknown:
         raise WorkspaceFuturesError(f"unsupported futures roots: {', '.join(unknown)}")
-    multipliers = {PRODUCTS[root].price_multiplier_to_cents for root in selected_roots}
-    if len(multipliers) != 1:
+    quote_units = {
+        (PRODUCTS[root].price_multiplier_to_cents, PRODUCTS[root].quote_description)
+        for root in selected_roots
+    }
+    if len(quote_units) != 1:
         raise WorkspaceFuturesError(
             "one export cannot mix products with different quote units; "
-            "download CC separately from ZC/ZW"
+            "download CC and KC separately from ZC/ZW and from each other"
         )
     requests = []
     for year in years:
@@ -376,12 +384,16 @@ def _sha256(path: Path) -> str:
 
 def _mapping(query_reference: str, roots: Iterable[str]) -> Mapping[str, Any]:
     selected = tuple(dict.fromkeys(str(root).upper() for root in roots))
-    multipliers = {PRODUCTS[root].price_multiplier_to_cents for root in selected}
-    if len(multipliers) != 1:
+    quote_units = {
+        (PRODUCTS[root].price_multiplier_to_cents, PRODUCTS[root].quote_description)
+        for root in selected
+    }
+    if len(quote_units) != 1:
         raise WorkspaceFuturesError(
             "one export cannot mix products with different quote units; "
-            "download CC separately from ZC/ZW"
+            "download CC and KC separately from ZC/ZW and from each other"
         )
+    multiplier = next(iter(quote_units))[0]
     return {
         "schema_version": 1,
         "source_name": SOURCE_NAME,
@@ -401,7 +413,7 @@ def _mapping(query_reference: str, roots: Iterable[str]) -> Mapping[str, Any]:
             "open_interest": "open_interest",
         },
         "root_values": {root: root for root in selected},
-        "price_multiplier_to_cents": multipliers.pop(),
+        "price_multiplier_to_cents": multiplier,
     }
 
 

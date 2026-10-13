@@ -1,0 +1,68 @@
+schema_version: 1
+protocol_id: coffee-model-baseline-v1
+locked_on: 2026-10-12
+
+purpose: >-
+  Test whether point-in-time weather in Brazil's arabica belt adds repeatable,
+  tradable information for ICE-US Coffee C beyond the dated futures curve and
+  the market's own history.
+
+information_boundary:
+  development_end_year: 2023
+  consumed_diagnostic_start_year: 2024
+  consumed_diagnostic_used_for_selection: false
+
+geography:
+  primary: Brazil arabica belt
+  points: [Sul de Minas, Cerrado Mineiro, Mogiana]
+  pooled_global_weather_allowed: false
+  reason: producer calendars and hemispheres are not interchangeable
+
+model_test:
+  decision_source: final ICE session of each calendar week
+  horizon_trading_sessions: 20
+  overlap: prohibited by waiting until the prior position has exited
+  outer_splits: 5
+  outer_embargo_rows: 1
+  inner_validation_fraction: 0.20
+  models: [ridge, logistic]
+  targets:
+    - coffee_outright
+    - coffee_curve
+  feature_sets:
+    - market_only
+    - weather_market
+  primary_comparison: weather_market versus market_only on development folds
+
+execution:
+  source: dated LSEG ICE-US KC contracts
+  roll_business_days: 25
+  entry: next shared same-contract session open
+  exit: twenty shared sessions after entry at the same-contract opens
+  outright_contracts: 1
+  curve_contracts: 2
+  coffee_contract_pounds: 37500
+  commission_usd_per_contract_side: 2.50
+  slippage_ticks_per_contract_side: 1.0
+  tick_size_cents_per_pound: 0.05
+  tick_value_usd: 18.75
+  cost_selection: median exact estimated cost rate in development only
+  margin_constraint: unavailable_in_v1
+
+frost_event_study:
+  threshold_c: 4.0
+  season_months: [6, 7, 8]
+  regional_rule: minimum daily temperature across the three Brazil points
+  episode_spacing_calendar_days: 10
+  horizons_trading_sessions: [20, 60]
+  fitted_model: false
+  reason: too few independent frost episodes for machine learning
+
+interpretation:
+  promotion_allowed: false
+  consumed_2024_plus_role: diagnosis_only
+  blockers_before_promotion:
+    - fixed-specification robustness validation
+    - authoritative dated ICE margin history
+    - capital-constrained execution replay
+    - prospective observations untouched by model development

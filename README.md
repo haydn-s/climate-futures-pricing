@@ -29,6 +29,11 @@ The central result is a useful asymmetry:
   preliminary ranking favored weather plus market features, but exact costs,
   non-overlapping execution, year-block uncertainty, a circular-shift null, and
   simple-rule comparisons reject it. Mean reversion performs better.
+- **The dated-contract coffee avenue also fails validation.** Brazil weather
+  improves nearby-minus-deferred curve models relative to market-only controls,
+  but the best pre-2024 candidate is effectively flat after estimated costs. A
+  frost-curve pattern in three selected episodes reverses in the newly added
+  2000–2011 history and fails its season-matched placebo test.
 
 The supported conclusion is not that weather is irrelevant to prices. It is that
 free climate data can measure important physical shocks, while these particular
@@ -46,6 +51,7 @@ repeatable return forecast.
 | Can market-neutral targets and nonlinear models turn the null into a signal? | They produced an initial continuous-price candidate, but no predeclared model clears the final dated-contract execution gate. | Nested walk-forward selection, a consumed 2024–2026 diagnostic, LSEG execution labels, simple-rule comparisons, and block/null uncertainty tests. |
 | Do cocoa and coffee behave like corn? | No. Their public agricultural statistics introduce crop-specific measurement problems. | Exploratory specification searches and case studies, not confirmatory tests. |
 | Does West African weather improve a dated-contract cocoa signal? | It improves the preliminary model ranking, but the frozen candidate fails the fixed robustness gate. | 75 LSEG ICE-US contracts, nested forward selection through 2023, exact costs and overlap, year bootstrap, circular-shift null, and simple-rule controls. |
+| Does Brazil weather improve a dated-contract Coffee C signal? | It improves the relative ranking of curve models, but the best bounded candidate is effectively flat and the frozen frost-curve rule fails the historical extension. | 135 LSEG ICE-US contracts, 155 independent baseline decisions, a new 2000–2011 extension, exact costs, and same-year seasonal placebos. |
 
 Agribusiness equities and NOAA Storm Events remain outside the implemented
 analysis.
@@ -384,12 +390,45 @@ series does not show a corresponding weather relationship: biennial bearing
 alone explains 44% of detrended production variance, and the statistic combines
 frost-exposed arabica with robusta and unaffected regions.
 
+The execution-aligned coffee baseline uses 37,720 licensed LSEG rows across 75
+ICE-US Coffee C contracts. The locked comparison creates 155 non-overlapping
+20-session decisions and tests outright returns plus nearby-minus-deferred curve
+returns. Candidate selection ends in 2023; 2024+ is a consumed diagnostic.
+
+The best curve specification is the weather-plus-market logistic model at 0.5%
+summed net return and Sharpe 0.05—economically flat. Relative to the corresponding
+market-only model, adding Brazil weather improves development net by 14.6
+percentage points and Sharpe by 1.38, but improvement from a poor baseline is
+not an edge. The best outright candidate loses 5.9% with Sharpe −0.09.
+
+The predeclared frost study contains only three development episodes. All three
+are followed by a positive 20-session nearby-minus-deferred move, averaging
+0.63% gross and 0.48% after estimated two-leg costs, while outright and
+60-session responses are inconsistent. One consumed 2025 episode has the same
+positive short-horizon curve sign. This is a mechanistically interesting
+observation, not enough data for significance or a fitted frost model.
+
+The final bounded test freezes that apparent rule before adding LSEG history
+from 2000–2011. The extension supplies only three eligible frost episodes; the
+fixed long-nearby/short-deferred trade is positive after costs in 1/3, with
+mean net −0.93% and median net −1.71%. Its same-year June–August placebo
+p-value is 0.966. All five locked gate conditions fail. Even pooling the selected
+and new pre-2024 episodes produces mean net −0.23% and p=0.823. The supported
+conclusion is that the initial 3/3 pattern did not replicate.
+
 Run:
 
 ```bash
 PYTHONPATH=src python analysis/cocoa_weather.py
 PYTHONPATH=src python analysis/coffee_weather.py
+PYTHONPATH=src python analysis/coffee_model_baseline.py
+PYTHONPATH=src python analysis/coffee_frost_curve_validation.py
 ```
+
+See [`analysis/coffee_model_baseline_report.md`](analysis/coffee_model_baseline_report.md)
+and [`analysis/coffee_frost_curve_validation_report.md`](analysis/coffee_frost_curve_validation_report.md).
+The locked protocols are in [`config/coffee_model_validation.yaml`](config/coffee_model_validation.yaml)
+and [`config/coffee_frost_curve_validation.yaml`](config/coffee_frost_curve_validation.yaml).
 
 ## Evidence and inference guardrails
 
@@ -556,6 +595,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command
 - [x] Licensed LSEG Workspace contract downloader and validated 2011-2026 ZC/ZW panel
 - [x] LSEG ICE-US cocoa adapter and validated 2011-2026 dated CC contract panel
+- [x] LSEG ICE-US Coffee C adapter and validated 2000-2026 dated KC contract panel
 - [x] Frozen-signal LSEG target and next-open execution replay with cost sensitivity
 - [x] Fixed-specification execution attribution and cost-capacity diagnostics
 - [x] Immutable, hash-linked prospective paper decision and outcome workflow
@@ -564,6 +604,8 @@ reproduce.py             resumable end-to-end workflow
 - [x] Cocoa and coffee measurement case studies
 - [x] Preliminary execution-aligned cocoa weather/market model comparison
 - [x] Fixed-specification cocoa uncertainty, null, baseline, and double-cost validation
+- [x] Preliminary execution-aligned Coffee C outright, curve, and frost comparison
+- [x] Fixed Coffee C frost-curve historical extension and season-matched null
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
