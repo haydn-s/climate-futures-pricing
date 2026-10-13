@@ -75,19 +75,30 @@ PYTHONPATH=src python -m pipeline crop-progress-features
 Raw reports, the append-only manifest, and processed tables live under ignored
 `data/`. No API key or licensed source is needed for the USDA side.
 
-## Modeling boundary still to be frozen
+## Frozen modeling boundary
 
-No return model has been run on these features yet. Before looking at predictive
-results, the next implementation step is to:
+No candidate return model had been run when
+[`config/nass_corn_progress_validation.yaml`](../config/nass_corn_progress_validation.yaml)
+was written. The execution join produces 487 unique decisions from April 2,
+2012 through September 28, 2026. Each release maps to the first later LSEG ZC
+open and a five-session exit under the existing roll and cost policy. Same-day
+settlement controls are usable because they precede the 4:00 p.m. report; they
+are available for 482 decisions, with the other five falling back to the prior
+session. No entry date is duplicated.
 
-1. map each 4:00 p.m. release to the first dated LSEG ZC session open strictly
-   afterward;
-2. apply the existing roll, five-session holding, non-overlap, commission, and
-   slippage rules;
-3. define compact market-only, USDA-only, and USDA-plus-market comparisons;
-4. lock development years, one final untouched year, simple direction rules,
-   cost stress, and failure conditions; and
-5. commit that protocol before evaluating any candidate return series.
+The protocol locks market-only, condition-plus-market, progress-plus-market, and
+all-USDA-plus-market feature sets crossed with Ridge, logistic, and one shallow
+boosting model. Candidate identity may use the 2017–2023 outer predictions;
+2024–2025 are final development confirmation years. The model-specific 2026
+holdout cannot enter selection or the gate. Because 2026 prices have appeared in
+other project studies, that holdout is a sealed specification diagnostic, not
+project-wide independent evidence.
+
+The fixed comparison buys corn when the published good-minus-poor condition
+balance deteriorates, sells when it improves, and holds when condition is absent
+or unchanged. The gate also requires matched-model market improvement, positive
+base and doubled-cost results, broad year/fold support, and both one-release
+shift placebos to underperform.
 
 This test is about scheduled USDA information. It will not reopen GEFS feature or
 threshold search, and a failed result will be reported as another bounded null.

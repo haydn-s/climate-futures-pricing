@@ -659,7 +659,8 @@ reproduce.py             resumable end-to-end workflow
 - [x] Operational GEFS Corn Belt extraction and forecast-revision feature panel
 - [x] Locked GEFS development validation and one-time sealed 2026 holdout
 - [x] Point-in-time USDA Crop Progress archive, parser, and fixed release features
-- [ ] Locked dated-contract USDA Crop Progress model validation
+- [x] Locked dated-contract USDA Crop Progress execution frame and validation protocol
+- [ ] USDA Crop Progress development evaluation and sealed 2026 assessment
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights

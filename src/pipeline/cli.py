@@ -387,6 +387,18 @@ def build_parser() -> argparse.ArgumentParser:
     crop_progress_features.add_argument("--out", default="nass_corn_progress_features",
                                         help="output processed table name")
     crop_progress_features.add_argument("--dry-run", action="store_true")
+
+    crop_progress_frame = commands.add_parser(
+        "crop-progress-model-frame", parents=[_global_options()],
+        help="join USDA release features to dated LSEG ZC next-open labels")
+    crop_progress_frame.add_argument("--features", default="nass_corn_progress_features",
+                                     help="release-level USDA feature table")
+    crop_progress_frame.add_argument("--contracts", default="futures_contracts",
+                                     help="processed dated LSEG contract table")
+    crop_progress_frame.add_argument("--out", default="nass_corn_progress_model_frame",
+                                     help="output processed table name")
+    crop_progress_frame.add_argument("--holding-sessions", type=int, default=5)
+    crop_progress_frame.add_argument("--dry-run", action="store_true")
     return parser
 
 
@@ -1165,6 +1177,36 @@ def build_crop_progress_features(args: argparse.Namespace,
     return 0
 
 
+def build_crop_progress_model_frame(args: argparse.Namespace,
+                                    processed: ProcessedStore) -> int:
+    from .crop_progress_model import CropProgressModelError, build_execution_frame
+
+    try:
+        features = processed.read(args.features)
+        contracts = processed.read(args.contracts)
+        frame = build_execution_frame(
+            features, contracts, holding_sessions=args.holding_sessions
+        )
+    except (FileNotFoundError, CropProgressModelError, OSError, ValueError) as exc:
+        print(f"Crop Progress model-frame error: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"Crop Progress model frame: {len(frame)} decision(s), "
+        f"{frame['date'].min().date()} through {frame['date'].max().date()}"
+    )
+    same_day = int((frame["market_data_through"] == frame["date"]).sum())
+    print(
+        f"  same-day pre-release settlement controls: {same_day}/{len(frame)}; "
+        "entries are strictly after 4 p.m. releases"
+    )
+    if args.dry_run:
+        print(f"  would write {processed.path(args.out)}")
+        return 0
+    path = processed.write(args.out, frame)
+    print(f"wrote {path}")
+    return 0
+
+
 def download_gefs(args: argparse.Namespace, sources: dict[str, SourceSpec],
                   raw: RawStore) -> int:
     """Archive a bounded GEFS sample, preserving intraday availability metadata."""
@@ -1454,6 +1496,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return build_gefs_model_frame(args, processed)
         if args.command == "crop-progress-features":
             return build_crop_progress_features(args, processed)
+        if args.command == "crop-progress-model-frame":
+            return build_crop_progress_model_frame(args, processed)
         return status(args, sources, raw, processed)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
