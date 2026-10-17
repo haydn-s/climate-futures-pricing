@@ -19,6 +19,11 @@ The central result is a useful asymmetry:
   0.73, or 0.46 with the exceptional 2012 season removed. A separate forward-year
   evaluation beats training-only trend forecasts with R² 0.748, or 0.476 when
   2012 is removed from both training and evaluation.
+- **Early corn yield nowcasts are sensitive to 2012.** Under reconstructed
+  publication lags, point weather plus drought beats a trend forecast at the
+  three fixed issue dates in the full sample. Removing 2012 leaves negative
+  R² versus trend at every date; the weather-only August result is modestly
+  positive. County history lacks the vintages needed for the same early test.
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
@@ -117,6 +122,38 @@ includes source fingerprints and limitations; the committed prediction CSV
 exposes every training boundary, forecast, baseline, and observed yield.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_forward_validation.py`
+
+The fixed-date follow-up asks how early the yield relationship is useful. It
+uses only published observations at August 1, September 1, and October 1,
+with the existing five-day POWER lag and Thursday USDM release rule. The two
+existing point-weather feature sets and Ridge(alpha=1) are fixed. Every model
+uses the same complete training and test years at all three dates.
+
+| Issue date | Points + drought MAE (t/ha) | R² vs trend | R² vs trend excluding 2012 |
+|---|---:|---:|---:|
+| August 1 | 0.424 | 0.576 | −0.073 |
+| September 1 | 0.445 | 0.488 | −0.226 |
+| October 1 | 0.445 | 0.482 | −0.266 |
+
+The trend control has MAE 0.579 t/ha across the 16 scored harvests (2010–2025),
+or 0.360 across the 15 scored harvests when 2012 is removed and every fold is
+refitted. The weather-only August model retains R² versus trend 0.072 without
+2012, but the points-plus-drought result does not remain positive. Later issue
+dates do not improve accuracy monotonically.
+
+This is a historical simulation under reconstructed release rules. POWER,
+USDM, and final yield histories may be revised; original vintages are absent.
+County weather is excluded from these forecasts: only 3–4 of the 26 harvest
+years have any current-season county days published by the respective issue
+dates in this archive. Rebuild dates are preserved rather than replaced with
+assumed earlier publication dates. The full-season county result above is
+therefore a different information set from the available early point data.
+
+The [nowcast report](analysis/corn_yield_nowcast_report.md) includes accuracy
+and case-study figures, the county availability audit, source fingerprints,
+and links to the feature and prediction CSVs.
+
+Run: `PYTHONPATH=src python analysis/corn_yield_nowcast.py`
 
 ### 2. Published observations do not forecast returns
 
