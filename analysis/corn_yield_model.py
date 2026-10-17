@@ -44,13 +44,10 @@ from sklearn.linear_model import LinearRegression, Ridge  # noqa: E402
 from sklearn.pipeline import make_pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 
-from pipeline.config import load_geography  # noqa: E402
-from pipeline.features import annual, panel  # noqa: E402
+from pipeline.config import Geography, load_geography  # noqa: E402
+from pipeline.features import annual  # noqa: E402
 from pipeline.storage import ProcessedStore, default_data_root  # noqa: E402
-
-# A season must be close to fully covered before its aggregates mean anything.
-MIN_SEASON_DAYS = 180
-MIN_SEASON_MAPS = 25
+from pipeline.yield_validation import build_annual_table  # noqa: E402
 
 # The two measurements, and the feature sets scored for each.
 CANDIDATES = {
@@ -78,42 +75,18 @@ def stars(p: float) -> str:
     return "***" if p < 0.01 else "**" if p < 0.05 else "*" if p < 0.10 else ""
 
 
-def build_table(store: ProcessedStore, geography: ProcessedStore) -> pd.DataFrame:
+def build_table(store: ProcessedStore, geography: Geography) -> pd.DataFrame:
     """One row per year: both weather measurements, drought, and raw yield."""
-    crop = geography.crop("corn")
-    states = tuple(state.postal for state in crop.states)
-    season = range(crop.sensitive_months.start, crop.sensitive_months.end + 1)
-
-    points = panel.belt_weather(store.read("nasa_power_point_daily"), "corn")
-    counties = panel.belt_counties(store.read("nclimgrid_county_daily"), states)
-    drought = panel.belt_drought(store.read("usdm_county_drought"), states)
-
-    table = annual.annual_weather(points, season=season)
-    table = table.join(annual.annual_weather(
-        counties, tmax_column="cty_tmax_c", precip_column="cty_prcp_mm",
-        season=season, label="cty_"))
-    table = table.join(annual.annual_drought(drought, season=season))
-    table["yield_t_per_ha"] = annual.corn_yield(store.read("owid_yields_annual"))
-
-    # Drop years either measurement only partly covers: a half-season sum reads
-    # as a mild year rather than a missing one.
-    complete = (table["days"].fillna(0) >= MIN_SEASON_DAYS) \
-        & (table["cty_days"].fillna(0) >= MIN_SEASON_DAYS) \
-        & (table["maps"].fillna(0) >= MIN_SEASON_MAPS) \
-        & table["yield_t_per_ha"].notna()
-    dropped = table.loc[~complete]
-    if not dropped.empty:
-        print(f"dropped {len(dropped)} incomplete year(s): "
-              f"{', '.join(str(y) for y in dropped.index)}")
-    return table.loc[complete].copy()
+    return build_annual_table(store, geography)
 
 
 def leave_one_year_out(table: pd.DataFrame, features: list[str],
                        model_name: str = "ridge") -> tuple[float, float, int]:
     """Out-of-sample R-squared and correlation, refitting the trend per fold.
 
-    The baseline for R-squared is the training years' mean shortfall, which is
-    the only prediction available without the held-out harvest.
+    The descriptive R-squared denominator uses the mean of held-out anomalies.
+    For a chronological evaluation against training-only trend forecasts, run
+    corn_yield_forward_validation.py. These scores use different baselines.
     """
     usable = table.dropna(subset=[*features, "yield_t_per_ha"])
     years = usable.index.to_numpy()

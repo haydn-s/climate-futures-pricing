@@ -16,7 +16,9 @@ The central result is a useful asymmetry:
 
 - **The physical measurement works for US corn.** County-level heat and drought
   predict held-out annual yield shortfalls with an out-of-sample R-squared of
-  0.73, or 0.46 with the exceptional 2012 season removed.
+  0.73, or 0.46 with the exceptional 2012 season removed. A separate forward-year
+  evaluation beats training-only trend forecasts with R² 0.748, or 0.476 when
+  2012 is removed from both training and evaluation.
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
@@ -54,7 +56,7 @@ repeatable return forecast.
 
 | Question | Current answer | Evidence level |
 |---|---|---|
-| Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points. | Strongest result: forward, leave-one-year-out validation across 26 harvests. |
+| Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points and training-only trend forecasts. | Leave-one-year-out measurement across 26 harvests plus chronological forecasts for 2010–2025; revised historical data, not an untouched holdout. |
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
@@ -88,6 +90,33 @@ with detrended yield, or −0.73 excluding 2012. These correlations explain the
 relationship; the held-out scores are the stronger validation result.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_model.py`
+
+A separate chronological evaluation trains only on complete seasons before the
+year being predicted, starting after ten training years. The yield trend,
+standardization, and fixed Ridge model are refitted within every fold. All
+specifications use identical years and are compared with a matched trend-only
+yield forecast.
+
+| Feature set | Forward MAE (t/ha) | R² vs trend | R² vs trend excluding 2012 |
+|---|---:|---:|---:|
+| Trend-only control | 0.579 | 0.000 | 0.000 |
+| Five representative points | 0.448 | 0.441 | −0.142 |
+| County averages | 0.387 | 0.662 | 0.335 |
+| County averages plus drought | **0.314** | **0.748** | **0.476** |
+| Five points plus drought | 0.423 | 0.503 | −0.230 |
+
+The full run scores 16 forecasts from 2010–2025. The sensitivity run removes
+2012 from both training and testing, refits every fold, and scores 15 forecasts.
+R² versus trend uses the fold-specific trend forecast error as its denominator;
+it is a different metric from the leave-one-year-out R² above. These are
+full-season historical hindcasts with potentially revised inputs, not in-season
+forecasts or fresh independent confirmation.
+
+The [forward evaluation report](analysis/corn_yield_forward_validation_report.md)
+includes source fingerprints and limitations; the committed prediction CSV
+exposes every training boundary, forecast, baseline, and observed yield.
+
+Run: `PYTHONPATH=src python analysis/corn_yield_forward_validation.py`
 
 ### 2. Published observations do not forecast returns
 
@@ -480,7 +509,8 @@ The analyses are deliberately not treated as equally conclusive.
 
 1. **Validated measurement:** the corn yield result uses leave-one-year-out
    predictions, refits the yield trend within every fold, and reports the result
-   with and without 2012.
+   with and without 2012. The separate chronological evaluation trains on earlier
+   years only and compares yield errors with fold-specific trend forecasts.
 2. **Predictive null:** return models use forward-only expanding windows,
    training-only scaling, and an embargo equal to the forward-return horizon.
    Weekly sampling checks that overlapping daily targets are not hiding skill.
