@@ -30,6 +30,10 @@ The central result is a useful asymmetry:
   2012, with no sign change in either. The remaining positive August nowcast
   figure does flip sign. Skill is concentrated in the seasons furthest from
   trend and is negative in the calmest third once 2012 is removed.
+- **A usable interval around the estimate is wide.** Jackknife+ intervals cover
+  16 of 16 harvests at a nominal 90%, but span about ±8.7% of trend yield and
+  clear 2012's observed yield by 0.018 t/ha. In-season intervals are wider and
+  cover less often than their label, missing 2011 at every issue date.
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
@@ -69,6 +73,7 @@ repeatable return forecast.
 |---|---|---|
 | Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points and training-only trend forecasts. | Leave-one-year-out measurement across 26 harvests plus chronological forecasts for 2010–2025; revised historical data, not an untouched holdout. |
 | Which harvests does that measurement result rest on? | Not one: no single withheld season changes the sign of the full-season score. But the skill concentrates in the seasons furthest from trend and turns negative in the calmest third once 2012 is refitted out. | Per-harvest errors, single-season score influence, and descriptive severity/drought/heat/era strata over the 16 scored forecasts. |
+| How precise is a supply-risk estimate from it? | Not very. A 90% full-season interval spans about ±8.7% of trend yield and only just contains 2012; in-season intervals are wider still and cover less often than their label. | Jackknife+ intervals with chronological calibration, observed coverage at two levels, a calibration curve, and a Gaussian baseline for comparison. |
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
@@ -201,6 +206,48 @@ per-harvest table, the full influence grid for every specification and issue
 date, all strata, and the figure.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_strata.py`
+
+A fourth pass puts calibrated intervals around the same fixed forecasts, because
+a point estimate cannot serve as a supply-risk measure. Intervals use jackknife+,
+which draws calibration residuals from inside each fold's training window by
+withholding one training year at a time and refitting both the trend and the
+regression without it. Split conformal was rejected: a chronological calibration
+block cannot support a 90% level until 2019, leaving seven evaluable harvests in
+the sample's calmest stretch. Jackknife+ guarantees only `2 × level − 1`, so the
+90% interval carries an 80% worst-case guarantee, and that guarantee assumes an
+exchangeability an ordered yield series does not have — so coverage is measured
+rather than assumed.
+
+| Specification | Nominal | Covered | Mean width (% of trend) | Uncovered |
+|---|---:|---:|---:|---|
+| Full season, counties + drought | 90% | 16/16 | 17.4 | none |
+| Full season, counties + drought | 80% | 15/16 | 11.8 | 2012 |
+| Same, 2012 excluded and refitted | 90% | 15/15 | 13.6 | none |
+| August 1 nowcast, points + drought | 90% | 15/16 | 20.5 | 2011 |
+| August 1 nowcast, points only | 90% | 14/16 | 22.5 | 2011, 2012 |
+
+Sixteen scored harvests make one season worth 6.25 points of coverage, so these
+frequencies are coarse. The predeclared expectation — that intervals calibrated
+on calmer seasons would miss 2012 — was half right. The 90% jackknife+ interval
+does cover 2012, but it is the widest construction, 2012 has the largest realised
+error any fold can express, and the observed yield clears the nearer bound by
+0.018 t/ha. Every narrower construction misses it: the plain jackknife and the
+Gaussian baseline both exclude 2012 at 90%, and all three do at 80%. The Gaussian
+baseline runs at 83% of the jackknife+ width and covers fewer harvests in 25 of
+the 40 groups, which is what assuming symmetric normal residuals costs here.
+
+The price of coverage is width: a 90% full-season interval spans 17.4% of trend
+yield, roughly ±8.7%. The in-season intervals are worse on both counts — wider,
+at 20.5–23.1% of trend, and still covering 14–15 of 16 harvests against a 90%
+label. Every issue date and feature set leaves 2011 outside its interval, and
+2011 survives the refitted run without 2012: a shortfall season the available
+point weather both mispredicted and failed to flag as uncertain. The early
+information set is not only less skilful, its own uncertainty is understated.
+
+The [interval report](analysis/corn_yield_intervals_report.md) carries the full
+coverage grid, the calibration curve, and per-harvest bounds.
+
+Run: `PYTHONPATH=src python analysis/corn_yield_intervals.py`
 
 ### 2. Published observations do not forecast returns
 
@@ -775,7 +822,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Corn yield validation with honest trend fitting
 - [x] Forward-year and fixed-date corn yield evaluation against trend baselines
 - [x] Per-harvest, single-season influence, and crop-year strata decomposition
-- [ ] Calibrated predictive intervals for the corn supply-risk estimates
+- [x] Calibrated jackknife+ predictive intervals with measured coverage
 - [ ] Decision-utility demonstration for a hedger or physical grain buyer
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
