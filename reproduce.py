@@ -45,6 +45,7 @@ ANALYSES = (
     "analysis/corn_yield_strata.py",
     "analysis/corn_yield_intervals.py",
     "analysis/corn_yield_decisions.py",
+    "analysis/corn_price_information.py",
     "analysis/corn_peek_sweep.py",
     "analysis/corn_weekly_model.py",
     "analysis/corn_event_study.py",
