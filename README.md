@@ -34,6 +34,11 @@ The central result is a useful asymmetry:
   16 of 16 harvests at a nominal 90%, but span about ±8.7% of trend yield and
   clear 2012's observed yield by 0.018 t/ha. In-season intervals are wider and
   cover less often than their label, missing 2011 at every issue date.
+- **The estimate is insurance, not edge.** In a price-free provisioning decision
+  the conditional distribution cuts a buyer's cost 40-56% against a no-weather
+  baseline, and it is not winning by over-provisioning. But the saving is
+  bootstrap-positive only at the most risk-averse asymmetry, and excluding 2012
+  leaves a 14-19% estimate that fifteen harvests cannot separate from zero.
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
@@ -74,6 +79,7 @@ repeatable return forecast.
 | Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points and training-only trend forecasts. | Leave-one-year-out measurement across 26 harvests plus chronological forecasts for 2010–2025; revised historical data, not an untouched holdout. |
 | Which harvests does that measurement result rest on? | Not one: no single withheld season changes the sign of the full-season score. But the skill concentrates in the seasons furthest from trend and turns negative in the calmest third once 2012 is refitted out. | Per-harvest errors, single-season score influence, and descriptive severity/drought/heat/era strata over the 16 scored forecasts. |
 | How precise is a supply-risk estimate from it? | Not very. A 90% full-season interval spans about ±8.7% of trend yield and only just contains 2012; in-season intervals are wider still and cover less often than their label. | Jackknife+ intervals with chronological calibration, observed coverage at two levels, a calibration curve, and a Gaussian baseline for comparison. |
+| Can anyone act on it profitably? | Not as a trade. As insurance it cuts a buyer's provisioning cost 40-56% against a no-weather baseline, but that is bootstrap-positive only for the most risk-averse asymmetry and is not separable from zero once 2012 is removed. | Price-free newsvendor decision at a stated 2:1/4:1/8:1 penalty, a spread-matched conservatism control, year bootstraps, and shortfall/calm strata. |
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
@@ -248,6 +254,57 @@ The [interval report](analysis/corn_yield_intervals_report.md) carries the full
 coverage grid, the calibration curve, and per-harvest bounds.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_intervals.py`
+
+A fifth pass asks what the estimate is worth to someone who holds the risk. The
+project's two findings only conflict for a speculator: a grain buyer, feed mill,
+or lender already carries the exposure, and a better forecast buys them a lower
+chance of being caught short rather than a trading profit, which survives in a
+perfectly efficient market.
+
+The decision is deliberately **price-free**, because letting the user size a
+futures position would reimport the directional signal that failed every
+validation here and report that failure as a profit. Each August the user
+provisions a buffer against the shortfall below that fold's trend forecast,
+paying `penalty` per unit short and one unit per unit carried; the optimal buffer
+is the `penalty/(penalty+1)` order statistic of the predictive shortfall
+distribution. The asymmetry is a stated preference, reported at 2:1, 4:1 and 8:1,
+and costs are in holding-cost units so no price is needed.
+
+| Sample | Penalty | Cost vs climatology | Bootstrap 2.5% | P(saving > 0) |
+|---|---:|---:|---:|---:|
+| All years | 2:1 | −40.3% | −0.017 | 95% |
+| All years | 4:1 | −53.1% | −0.147 | 88% |
+| All years | 8:1 | −56.0% | **+0.061** | 98% |
+| 2012 excluded | 2:1 | −18.6% | −0.052 | 87% |
+| 2012 excluded | 4:1 | −14.4% | −0.238 | 66% |
+| 2012 excluded | 8:1 | −14.5% | −0.236 | 71% |
+
+The saving is not conservatism. An asymmetric loss rewards a wider distribution
+for its own sake, so a control hands the no-weather user the model's spread
+without its information; the model's residual spread is in fact 0.76 times
+climatology's across all years, so it is the *less* uncertain of the two and
+still beats that control by 39–52%.
+
+Most of the value is 2012. Across all years the saving is bootstrap-positive
+only at the 8:1 asymmetry — coherently, since 2012 is the season such a buyer
+fears. Excluding 2012 leaves a 14–19% point estimate whose bootstrap interval
+straddles zero at every asymmetry, with harvests improved barely outnumbering
+those made worse. The regime split shows the shape: at 4:1 without 2012 the model
+saves +1.81 cost units in seasons that fell short and loses 0.55 in seasons at or
+above trend, netting +1.26 — an insurance instrument that pays in bad years and
+charges a premium in good ones.
+
+So the supportable practical claim is narrow. A free-public-weather August
+estimate is worth having mainly as insurance against a 2012; it is not an edge
+against the futures market, and its interval is wide enough that any provisioning
+decision has to be built around the spread rather than the central value. The
+full-season rows in the committed CSVs are a bound, not a decision: county
+weather is not published in time to inform an August commitment.
+
+The [decision report](analysis/corn_yield_decisions_report.md) carries the full
+cost grid, the conservatism control, the bootstrap, and the regime strata.
+
+Run: `PYTHONPATH=src python analysis/corn_yield_decisions.py`
 
 ### 2. Published observations do not forecast returns
 
@@ -823,7 +880,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Forward-year and fixed-date corn yield evaluation against trend baselines
 - [x] Per-harvest, single-season influence, and crop-year strata decomposition
 - [x] Calibrated jackknife+ predictive intervals with measured coverage
-- [ ] Decision-utility demonstration for a hedger or physical grain buyer
+- [x] Price-free provisioning demonstration with a stated asymmetric loss
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command

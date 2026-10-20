@@ -40,7 +40,8 @@ made the intervals look better.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from statistics import NormalDist
 
 import numpy as np
@@ -123,6 +124,86 @@ def _intervals_for_year(point: float, loo_point: np.ndarray,
     }
 
 
+@dataclass(frozen=True)
+class FoldResiduals:
+    """Everything one chronological fold knows, before any interval is formed.
+
+    `signed` holds the leave-one-out residuals from inside the training window
+    and `loo_point` the matching leave-one-out forecasts at the test harvest, so
+    a consumer can rebuild a jackknife+ interval or a conformal predictive
+    sample. `train_anomalies` are the training years' observed deviations from
+    that fold's own trend, which is the climatological distribution available at
+    the same moment. Nothing here has seen the harvest being forecast.
+    """
+
+    feature_set: str
+    year: int
+    train_years: int
+    point: float
+    trend: float
+    actual: float
+    signed: np.ndarray
+    loo_point: np.ndarray
+    train_anomalies: np.ndarray
+
+    @property
+    def pit(self) -> float:
+        """Conformal rank of the realised error among the fold's residuals."""
+        error = abs(self.actual - self.point)
+        return min(1.0, float((1 + np.sum(np.abs(self.signed) <= error))
+                              / (len(self.signed) + 1)))
+
+
+def _prepare(table: pd.DataFrame, feature_sets: Mapping[str, Sequence[str]], *,
+             min_train_years: int) -> pd.DataFrame:
+    if not 2 <= min_train_years:
+        raise ValueError("min_train_years must be at least two")
+    if "trend_only" in feature_sets:
+        raise ValueError("trend_only has no fitted residuals to calibrate")
+    columns = sorted({name for names in feature_sets.values() for name in names})
+    return table.loc[:, [*columns, "yield_t_per_ha"]].replace(
+        [np.inf, -np.inf], np.nan).dropna().sort_index()
+
+
+def fold_residuals(
+    table: pd.DataFrame,
+    feature_sets: Mapping[str, Sequence[str]],
+    *, min_train_years: int = MIN_TRAIN_YEARS,
+) -> Iterator[FoldResiduals]:
+    """Walk the folds forward, yielding each one's forecast and residual history.
+
+    This is the expensive part of the calculation and the part that has to be
+    right about time, so intervals and downstream decisions share it rather than
+    each implementing the leave-one-out loop. For every withheld training year
+    the trend and the regression are both refitted without it.
+    """
+    usable = _prepare(table, feature_sets, min_train_years=min_train_years)
+    years = usable.index.to_numpy()
+    for name, features in feature_sets.items():
+        for year in years:
+            train_years = years[years < year]
+            if len(train_years) < min_train_years:
+                continue
+            training_yields = usable.loc[train_years, "yield_t_per_ha"]
+            point = float(_fold_forecast(usable, train_years, features, [year])[0])
+            trend = float(fit_trend(training_yields, [year])[0])
+            signed, loo_point = [], []
+            for withheld in train_years:
+                inner = train_years[train_years != withheld]
+                forecast = _fold_forecast(usable, inner, features, [withheld, year])
+                signed.append(float(usable.loc[withheld, "yield_t_per_ha"])
+                              - float(forecast[0]))
+                loo_point.append(float(forecast[1]))
+            yield FoldResiduals(
+                feature_set=name, year=int(year), train_years=len(train_years),
+                point=point, trend=trend,
+                actual=float(usable.loc[year, "yield_t_per_ha"]),
+                signed=np.asarray(signed), loo_point=np.asarray(loo_point),
+                train_anomalies=(training_yields.to_numpy(dtype=float)
+                                 / fit_trend(training_yields, train_years) - 1.0),
+            )
+
+
 def interval_predictions(
     table: pd.DataFrame,
     feature_sets: Mapping[str, Sequence[str]],
@@ -137,56 +218,31 @@ def interval_predictions(
     fold's calibration residuals, uniform on (0, 1] under exchangeability and the
     basis of the calibration curve.
     """
-    if not 2 <= min_train_years:
-        raise ValueError("min_train_years must be at least two")
     if any(not 0.0 < level < 1.0 for level in levels):
         raise ValueError("levels must lie strictly between zero and one")
-    if "trend_only" in feature_sets:
-        raise ValueError("trend_only has no fitted residuals to calibrate")
-    columns = sorted({name for names in feature_sets.values() for name in names})
-    usable = table.loc[:, [*columns, "yield_t_per_ha"]].replace(
-        [np.inf, -np.inf], np.nan).dropna().sort_index()
-    years = usable.index.to_numpy()
     rows = []
-    for name, features in feature_sets.items():
-        for year in years:
-            train_years = years[years < year]
-            if len(train_years) < min_train_years:
-                continue
-            point = float(_fold_forecast(usable, train_years, features, [year])[0])
-            trend = float(fit_trend(usable.loc[train_years, "yield_t_per_ha"],
-                                    [year])[0])
-            actual = float(usable.loc[year, "yield_t_per_ha"])
-            signed, loo_point = [], []
-            for withheld in train_years:
-                inner = train_years[train_years != withheld]
-                forecast = _fold_forecast(usable, inner, features, [withheld, year])
-                signed.append(float(usable.loc[withheld, "yield_t_per_ha"])
-                              - float(forecast[0]))
-                loo_point.append(float(forecast[1]))
-            signed = np.asarray(signed)
-            loo_point = np.asarray(loo_point)
-            error = abs(actual - point)
-            pit = float((1 + np.sum(np.abs(signed) <= error)) / (len(signed) + 1))
-            for level in levels:
-                for method, (lower, upper) in _intervals_for_year(
-                        point, loo_point, signed, level).items():
-                    finite = np.isfinite(lower) and np.isfinite(upper)
-                    rows.append({
-                        "feature_set": name, "year": int(year), "method": method,
-                        "nominal_level": level,
-                        "guaranteed_level": (2.0 * level - 1.0
-                                             if method == "jackknife_plus" else np.nan),
-                        "train_years": len(train_years),
-                        "calibration_residuals": len(signed),
-                        "actual_yield": actual, "trend_yield": trend,
-                        "predicted_yield": point, "lower": lower, "upper": upper,
-                        "width": upper - lower if finite else float("inf"),
-                        "width_pp_of_trend": ((upper - lower) / trend * 100
-                                              if finite else float("inf")),
-                        "covered": bool(lower <= actual <= upper),
-                        "finite": bool(finite), "pit": min(pit, 1.0),
-                    })
+    for fold in fold_residuals(table, feature_sets,
+                               min_train_years=min_train_years):
+        for level in levels:
+            bounds = _intervals_for_year(fold.point, fold.loo_point,
+                                         fold.signed, level)
+            for method, (lower, upper) in bounds.items():
+                finite = np.isfinite(lower) and np.isfinite(upper)
+                rows.append({
+                    "feature_set": fold.feature_set, "year": fold.year,
+                    "method": method, "nominal_level": level,
+                    "guaranteed_level": (2.0 * level - 1.0
+                                         if method == "jackknife_plus" else np.nan),
+                    "train_years": fold.train_years,
+                    "calibration_residuals": len(fold.signed),
+                    "actual_yield": fold.actual, "trend_yield": fold.trend,
+                    "predicted_yield": fold.point, "lower": lower, "upper": upper,
+                    "width": upper - lower if finite else float("inf"),
+                    "width_pp_of_trend": ((upper - lower) / fold.trend * 100
+                                          if finite else float("inf")),
+                    "covered": bool(lower <= fold.actual <= upper),
+                    "finite": bool(finite), "pit": fold.pit,
+                })
     return pd.DataFrame(rows, columns=PREDICTION_COLUMNS)
 
 
