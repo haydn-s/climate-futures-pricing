@@ -313,6 +313,13 @@ cost grid, the conservatism control, the bootstrap, and the regime strata.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_decisions.py`
 
+The specification, evidence, and prohibited uses for the supply-risk estimator
+are collected in
+[`models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md`](models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md).
+It is a measurement model and carries no return forecast; the separate trading
+signal is documented in
+[`models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md`](models/corn-wheat-all-public-boosting-v1/MODEL_CARD.md).
+
 ### 2. Published observations do not forecast returns
 
 The point-in-time panel joins each trading date only to information whose
@@ -951,6 +958,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command
+- [x] Supply-risk estimator model card, with intervals, decision value and prohibited uses
 - [x] Licensed LSEG Workspace contract downloader and validated 2011-2026 ZC/ZW panel
 - [x] LSEG ICE-US cocoa adapter and validated 2011-2026 dated CC contract panel
 - [x] LSEG ICE-US Coffee C adapter and validated 2000-2026 dated KC contract panel
