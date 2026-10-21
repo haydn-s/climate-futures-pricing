@@ -200,7 +200,7 @@ def test_locked_trading_results_are_still_negative_everywhere_they_are_quoted():
 
 def _built_deck_text() -> str | None:
     """Every word of the committed deck, slides and notecards alike."""
-    deck = ROOT / "presentation/final/output/climate-futures-pricing-final.pptx"
+    deck = ROOT / "presentation/final/output/Final Presentation.pptx"
     if not deck.exists():
         return None
     with zipfile.ZipFile(deck) as archive:

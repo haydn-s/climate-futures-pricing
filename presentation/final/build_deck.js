@@ -142,112 +142,114 @@ function kit(pres) {
 }
 
 // ------------------------------------------------------------------ notecards
-// One card per slide: prompts, not a script. Each carries its own length, the
-// cumulative mark to leave that slide by for a 12-minute slot, and -- where a
-// slide invites an obvious challenge -- the answer to it. The anticipated
-// questions matter more than the prompts: the argument is unusual enough that
-// most of the risk is in the Q&A rather than in the delivery.
+// One card per slide, budgeted for EIGHT minutes of speaking followed by two
+// minutes of questions. Each carries its own length and the cumulative mark to
+// leave that slide by. At this budget a slide averages under a minute, so the
+// bullets are cues rather than sentences -- anything that reads like prose is
+// too long to glance at.
+//
+// The `IF ASKED` blocks are the Q&A asset. The argument is unusual enough --
+// a positive measurement, a negative trading result, and a power budget that
+// bounds the negative result without rescuing it -- that most of the risk sits
+// in the two minutes after the talk rather than in the talk. The close slide
+// indexes them.
 const NOTECARDS = {
-  title: `0:20  ·  leave by 0:20
+  title: `0:15  ·  leave by 0:15
 
 • Haydn Stucker · AIPI 590 final
-• The whole project in one sentence: free weather data measures a real corn supply shock, and the futures market has already priced it
-• Road map: what worked, what failed, why, and who can still use it`,
+• In one sentence: free weather data measures a real corn supply shock, and the futures market has already priced it`,
 
-  arc: `1:00  ·  leave by 1:20
+  arc: `0:40  ·  leave by 0:55
 
-• Two tests from the proposal: MEASURE the physical shock, PREDICT tradeable returns
-• Measurement worked, prediction did not — and that is not a contradiction, it is what an efficient market looks like
-• Flag the second number now: every result has a "with 2012 removed" column
-• Tell them to watch for it. It is the spine of the whole deck`,
+• Two tests from the proposal: MEASURE the shock, PREDICT returns
+• Measurement worked, prediction did not — not a contradiction, it is what efficiency looks like
+• Flag the device: every result carries a "2012 removed" number. Tell them to watch it`,
 
-  measurement: `1:25  ·  leave by 2:45
+  measurement: `1:05  ·  leave by 2:00
 
 • County heat and drought beat a training-only trend forecast on held-out harvests
-• Forward validation: train only on earlier years, refit the trend inside every fold
-• ${pct(D.supply_risk.r2_all_years)} of trend error removed across ${D.supply_risk.test_years} harvests; ${pct(D.supply_risk.r2_excluding_2012)} with 2012 refitted out
-• Both positive — that is the defensible claim, and it is narrower than it sounds
-• The footnote matters: county data reached only 3 of 26 seasons in time to be used
+• Forward validation — train on earlier years only, refit the trend inside every fold
+• ${pct(D.supply_risk.r2_all_years)} of trend error removed; ${pct(D.supply_risk.r2_excluding_2012)} with 2012 refitted out
+• Both positive. Narrower than it sounds: county data reached only 3 of 26 seasons in time
 
-IF ASKED — "why not just benchmark against USDA's own yield forecast?"
-  Fair, and it is the obvious next comparison. USDA condition ratings are in the
-  archive from 2012. The benchmark here is a trend forecast because that is what
-  someone with no weather data can always build; USDA's forecast would be a
-  stronger bar and is honest future work.`,
+IF ASKED — "why not benchmark against USDA's own forecast?"
+  Fair, and the stronger bar. Condition ratings are in the archive from 2012.
+  A trend forecast is the benchmark because anyone can build it with no weather
+  data at all. USDA's forecast is honest future work.`,
 
-  concentration: `1:35  ·  leave by 4:20
+  concentration: `1:05  ·  leave by 3:05
 
-• Withhold any single harvest and the score stays between ${sign(D.supply_risk.influence_low)} and ${sign(D.supply_risk.influence_high)}
-• No single removal flips the sign — so it is not one season's artifact
-• But the skill is concentrated: ${sign(D.supply_risk.severity_high_r2)} in the most extreme third of seasons
-• In the calmest third without 2012: ${sign(D.supply_risk.severity_low_r2_ex2012)} — worse than doing nothing
-• Land the characterisation: this is a damage function, and it works when the crop is failing
+• Withhold any single harvest: score stays ${sign(D.supply_risk.influence_low)} to ${sign(D.supply_risk.influence_high)}, no sign flip
+• So not one season's artifact — but concentrated
+• ${sign(D.supply_risk.severity_high_r2)} in the most extreme third; ${sign(D.supply_risk.severity_low_r2_ex2012)} in the calmest third without 2012
+• Land it: this is a damage function. It works when the crop is failing
 
-IF ASKED — "isn't 2012 just an outlier you should drop?"
-  Two different tests, both reported. Dropping it from the SCORE leaves ${sign(D.supply_risk.influence_low)}.
-  Dropping it from TRAINING and refitting every fold leaves ${sign(D.supply_risk.r2_excluding_2012)}. Neither
-  removes the result. But it is the season doing the most work, and the strata
-  say where the rest of the work happens.`,
+IF ASKED — "isn't 2012 just an outlier to drop?"
+  Two different tests, both reported. Out of the SCORE leaves ${sign(D.supply_risk.influence_low)}.
+  Out of TRAINING, refitting every fold, leaves ${sign(D.supply_risk.r2_excluding_2012)}. Neither removes
+  the result; it is the season doing the most work.`,
 
-  uncertainty: `1:30  ·  leave by 5:50
+  uncertainty: `1:00  ·  leave by 4:05
 
 • A point forecast is not a risk estimate — a buyer needs the spread
-• Jackknife+, calibrated only on earlier harvests; coverage measured, not assumed
-• ${D.uncertainty.covered}/${D.uncertainty.harvests} at a nominal ${pct(D.uncertainty.nominal_level)} — but be honest that the guarantee is only ${pct(D.uncertainty.guaranteed_level)}
-• ${D.uncertainty.tightest_year} clears its bound by ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha; every narrower construction misses it
-• The price of that coverage is ±${num(D.uncertainty.half_width_pp, 1)}% of trend yield. That is the usable resolution
+• Jackknife+, calibrated on earlier harvests only; coverage measured, not assumed
+• ${D.uncertainty.covered}/${D.uncertainty.harvests} at nominal ${pct(D.uncertainty.nominal_level)} — say that the guarantee is only ${pct(D.uncertainty.guaranteed_level)}
+• ${D.uncertainty.tightest_year} clears its bound by ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha. Price of coverage: ±${num(D.uncertainty.half_width_pp, 1)}% of trend
 
-IF ASKED — "16 observations is too few to calibrate anything"
-  Agreed, and that is why the method is distribution-free rather than Gaussian,
-  and why coverage is reported with its resolution: one season is worth 6.25
-  points. Split conformal would have been cleaner still but cannot reach 90%
-  until 2019 on this sample — that trade-off is in the report.`,
+IF ASKED — "16 observations cannot calibrate anything"
+  Agreed — which is why the method is distribution-free rather than Gaussian,
+  and why coverage is quoted with its resolution: one season is 6.25 points.`,
 
-  nulls: `1:15  ·  leave by 7:05
+  nulls: `0:50  ·  leave by 4:55
 
-• Now the other half. Every promoted candidate was frozen before its final test
-• GEFS sealed holdout: ${pct(D.trading_nulls.gefs_holdout_net, 1)} over ${D.trading_nulls.gefs_holdout_trades} trades, Sharpe ${num(D.trading_nulls.gefs_holdout_sharpe)}
-• USDA Crop Progress: ${pct(D.trading_nulls.usda_net, 1)}, positive in ${D.trading_nulls.usda_positive_years} of ${D.trading_nulls.usda_years} years
+• The other half. Every candidate frozen before its final test
+• GEFS sealed holdout ${pct(D.trading_nulls.gefs_holdout_net, 1)}, Sharpe ${num(D.trading_nulls.gefs_holdout_sharpe)}; USDA ${pct(D.trading_nulls.usda_net, 1)}
 • Seven predeclared checks failed, so the 2026 holdout was never opened
-• Say it plainly: nothing was retuned after a gate failed. The avenue was closed
-• This is the result, not a setback — the next slide is why`,
+• Nothing retuned after a gate failed. This is the result, not a setback`,
 
-  efficiency: `2:00  ·  leave by 9:05
+  efficiency: `1:35  ·  leave by 6:30
 
-• The most interesting slide. Three separate reasons, not one excuse
+• The core slide. Three reasons, not one excuse
 • ONE — already priced. Race run on the HARVEST, not returns: who knew what?
-• December contract explains ${num(D.efficiency.price_r2, 3)}, nowcast ${num(D.efficiency.nowcast_r2, 3)}, together only ${num(D.efficiency.joint_r2, 3)} — same information
-• Nowcast adds ${sign(D.efficiency.incremental_r2)} on top of the price; ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012
-• TWO — below resolution. Break-even sits ${D.efficiency.detection_ratio.toFixed(0)}× under what ${D.efficiency.observations_available} returns can detect
-• THREE — and this is the honest part — it lost money, which an invisible edge would not do
+• Price ${num(D.efficiency.price_r2, 3)}, nowcast ${num(D.efficiency.nowcast_r2, 3)}, together only ${num(D.efficiency.joint_r2, 3)} — same information
+• Nowcast adds ${sign(D.efficiency.incremental_r2)}; ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012
+• TWO — break-even sits ${D.efficiency.detection_ratio.toFixed(0)}× under what ${D.efficiency.observations_available} returns can detect
+• THREE — it lost money, which an invisible edge would not do
 
-IF ASKED — "so could a bigger sample find an edge?"
-  Possibly, and the deck says so rather than hiding it: at 10 bps you would need
-  about ${D.efficiency.observations_needed.toLocaleString()} independent returns against the ${D.efficiency.observations_available} available. But that
-  cuts both ways. The losses are far too large to be a small positive edge, so
-  the power argument bounds the evidence, it does not rescue the model.`,
+IF ASKED — "could a bigger sample find an edge?"
+  Possibly: ~${D.efficiency.observations_needed.toLocaleString()} independent returns against ${D.efficiency.observations_available} available. But it cuts
+  both ways — the losses are far too large to be a small positive edge. The
+  power argument bounds the evidence; it does not rescue the model.`,
 
-  provisioning: `1:45  ·  leave by 10:50
+  provisioning: `1:00  ·  leave by 7:30
 
-• So who can use this? Not a speculator — a buyer who already holds the exposure
-• Their payoff is a lower chance of being caught short, which survives in an efficient market
+• So who uses it? Not a speculator — someone already holding the exposure
 • Price-free by construction: no futures position anywhere in the test
-• Saves ${pct(D.provisioning.saving_all_years)} of provisioning cost against a no-weather baseline
-• The control that matters: the model is the NARROWER distribution (${num(D.provisioning.spread_ratio)}×), so this is not just over-provisioning
-• Without 2012: ${pct(D.provisioning.saving_excluding_2012)}, but the bootstrap straddles zero. Insurance, not a planning tool
+• Saves ${pct(D.provisioning.saving_all_years)} of provisioning cost vs a no-weather baseline
+• Control: model is the NARROWER distribution (${num(D.provisioning.spread_ratio)}×) — not just over-provisioning
+• Without 2012: ${pct(D.provisioning.saving_excluding_2012)}, bootstrap straddles zero. Insurance, not a planning tool
 
-IF ASKED — "why not put a dollar figure on it?"
-  Because a dollar figure needs a price, and a price is how the rejected trading
-  signal would sneak back in. Costs are in holding-cost units; converting scales
-  every strategy identically and changes no ranking.`,
+IF ASKED — "why no dollar figure?"
+  A dollar figure needs a price, and a price is how the rejected trading signal
+  sneaks back in. Costs are in holding-cost units; converting scales every
+  strategy identically and changes no ranking.`,
 
-  close: `0:40  ·  leave by 11:30
+  close: `0:30  ·  leave by 8:00   ·   then 2:00 for questions
 
-• Free climate data measures a real supply shock — in the seasons that matter
-• The market has already priced it by the time the model can compute it
-• The estimate is insurance for someone holding the risk, not an edge
-• Everything is reproducible: locked protocols, committed outputs, sealed holdouts that stayed sealed
-• Questions — and ~30 seconds of buffer if the earlier slides ran long`,
+• Measures a real supply shock — in the seasons that matter
+• Already priced by the time the model can compute it
+• Insurance for someone holding the risk, not an edge
+• Reproducible: locked protocols, committed outputs, sealed holdouts that stayed sealed
+
+Q&A INDEX — the five anticipated questions and the slide holding each answer:
+  USDA as benchmark .............. measurement
+  2012 as an outlier ............. concentration
+  sample too small to calibrate .. uncertainty
+  bigger sample, real edge? ...... efficiency
+  why no dollar figure ........... provisioning
+
+  If asked something not here: say what would settle it and what the repository
+  would need, rather than speculating. That is the project's whole method.`,
 };
 
 // ------------------------------------------------------------------ slides

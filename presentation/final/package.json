@@ -3,7 +3,7 @@
   "private": true,
   "description": "Builds the final deck from the project's own committed analysis outputs",
   "scripts": {
-    "build": "node build_deck.js output/climate-futures-pricing-final.pptx",
+    "build": "node build_deck.js \"output/Final Presentation.pptx\"",
     "previews": "node build_deck.js output/previews --single"
   },
   "dependencies": {

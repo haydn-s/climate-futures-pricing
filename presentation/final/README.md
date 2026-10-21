@@ -1,8 +1,14 @@
 # Final deck
 
-`output/climate-futures-pricing-final.pptx` — 9 slides for the November 18
-final presentation, with a speaker notecard on every slide (a time budget, a
-cumulative "leave by" mark, and short prompts) sized for a 12-minute slot.
+`output/Final Presentation.pptx` — 9 slides for the November 18 final
+presentation, with a speaker notecard on every slide (a time budget, a
+cumulative "leave by" mark, and short cues) budgeted for **8 minutes of
+speaking followed by 2 minutes of questions**.
+
+At that budget a slide averages under a minute, so the notecards are cues
+rather than sentences. Five of them carry an `IF ASKED` block answering the
+challenge that slide invites, and the closing card indexes all five: with a
+dedicated Q&A, most of the risk sits in the two minutes after the talk.
 
 ## Why this replaces the mid-semester builder
 
@@ -54,7 +60,7 @@ about 200 dpi at full-slide width, crisp on a projector without carrying a
 ```bash
 ../../.venv/bin/python deck_data.py   # derives deck_data.json from ../../analysis
 npm install                           # pptxgenjs, sharp, react-icons
-npm run build                         # writes output/climate-futures-pricing-final.pptx
+npm run build                         # writes output/Final Presentation.pptx
 ```
 
 `npm run previews` writes one single-slide file per slide into
