@@ -1,0 +1,4 @@
+symbol,horizon_days,return_sd,overlapping_observations,independent_observations,first_date,last_date
+ZC=F,1,0.01955206147,3910,3910,2000-07-18,2026-09-25
+ZC=F,5,0.04477758462,3906,781,2000-07-24,2026-09-25
+ZC=F,10,0.06355425443,3901,390,2000-07-31,2026-09-25

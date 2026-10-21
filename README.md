@@ -42,6 +42,12 @@ The central result is a useful asymmetry:
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
+- **And the reason is now separated into three.** The new-crop December contract
+  already explains the harvest about as well as the weather nowcast does, which
+  adds only +0.120 on top of it and nothing at all without 2012. What might
+  remain is 13× below the smallest edge 781 independent returns could detect at
+  realistic costs. And the executed backtests lost money decisively, which an
+  undetectably small positive edge would not do.
 - **Data construction becomes the limiting factor for tree crops.** A West
   African cocoa aggregate reveals a plausible dry-spell signal that individual
   country records obscure, while Brazil's national coffee statistic mixes crop
@@ -79,6 +85,7 @@ repeatable return forecast.
 | Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points and training-only trend forecasts. | Leave-one-year-out measurement across 26 harvests plus chronological forecasts for 2010–2025; revised historical data, not an untouched holdout. |
 | Which harvests does that measurement result rest on? | Not one: no single withheld season changes the sign of the full-season score. But the skill concentrates in the seasons furthest from trend and turns negative in the calmest third once 2012 is refitted out. | Per-harvest errors, single-season score influence, and descriptive severity/drought/heat/era strata over the 16 scored forecasts. |
 | How precise is a supply-risk estimate from it? | Not very. A 90% full-season interval spans about ±8.7% of trend yield and only just contains 2012; in-season intervals are wider still and cover less often than their label. | Jackknife+ intervals with chronological calibration, observed coverage at two levels, a calibration curve, and a Gaussian baseline for comparison. |
+| Why do the climate signals not become profitable trades? | Three reasons, separated: the new-crop December price already carries most of the same information, what remains is below this sample's detection floor at realistic costs, and the executed backtests lost money rather than hovering near zero. | Information horse race on the harvest with 14-16 seasons and a whole-harvest bootstrap, plus a break-even-versus-detectable power budget on 781 independent returns. |
 | Can anyone act on it profitably? | Not as a trade. As insurance it cuts a buyer's provisioning cost 40-56% against a no-weather baseline, but that is bootstrap-positive only for the most risk-averse asymmetry and is not separable from zero once 2012 is removed. | Price-free newsvendor decision at a stated 2:1/4:1/8:1 penalty, a spread-matched conservatism control, year bootstraps, and shortfall/calm strata. |
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
@@ -691,6 +698,66 @@ and [`analysis/coffee_frost_curve_validation_report.md`](analysis/coffee_frost_c
 The locked protocols are in [`config/coffee_model_validation.yaml`](config/coffee_model_validation.yaml)
 and [`config/coffee_frost_curve_validation.yaml`](config/coffee_frost_curve_validation.yaml).
 
+## Why the climate signal does not become a trade
+
+Every return test above reports approximately zero or negative out-of-sample
+skill. That result is consistent with several different worlds, and the
+backtests cannot separate them on their own. Two are separated here.
+
+**Was the weather already in the price?** The race runs on the harvest, not on
+returns: regressing returns on a signal asks whether the signal predicts the
+price, which the backtests already answered, while regressing the realised yield
+deviation on the published nowcast, on the contemporaneous new-crop December
+price change since April 1, and on both asks who knew what. Nothing is refit.
+
+| Sample | Price source | Harvests | Nowcast R² | Price R² | Joint R² | Nowcast adds | β kept |
+|---|---|---:|---:|---:|---:|---:|---:|
+| All years | December contract | 14 | +0.710 | +0.676 | +0.797 | +0.120 | 61% |
+| 2012 excluded | December contract | 13 | +0.004 | +0.212 | +0.214 | +0.001 | — |
+| All years | Continuous front | 16 | +0.682 | +0.380 | +0.767 | +0.387 | 83% |
+| 2012 excluded | Continuous front | 15 | +0.079 | +0.130 | +0.173 | +0.043 | 76% |
+
+Largely yes. On the dated contract the nowcast and the price mostly explain the
+same thing, the nowcast's incremental contribution is +0.120, and the
+whole-harvest bootstrap on its coefficient does not exclude zero. Without 2012 it
+adds +0.001 and the price retains the larger share of what little is explained.
+The continuous front month leaves more room for the weather model, but in August
+it mixes old and new crop and carries roll artefacts, so the cleaner instrument
+is the one that subsumes the signal — the direction an efficiency argument
+predicts.
+
+**Could this sample have seen a tradeable edge?** A sign rule on 4.48% five-day
+growing-season returns breaks even at a small correlation, and a small
+correlation needs a large sample to separate from zero. Those are different
+quantities:
+
+| Round-trip cost | Break-even R² | Detectable R² | Independent draws needed | Available |
+|---:|---:|---:|---:|---:|
+| 10 bps | 0.00078 | 0.01005 | 10,019 | 781 |
+| 24 bps | 0.00451 | 0.01005 | 1,740 | 781 |
+| 50 bps | 0.01959 | 0.01005 | 401 | 781 |
+
+At the cost levels that actually apply, the edge that would pay for itself is
+**13× smaller** than the smallest edge 781 independent growing-season returns can
+distinguish from zero. There is a band of signal strengths that would be
+profitable and invisible, and a null result cannot rule them out.
+
+**What that does not excuse.** The power budget describes the experiment's
+resolution, not a defence of its result. These backtests did not merely fail to
+reach significance: the locked USDA Crop Progress model lost 52.7% after costs,
+the sealed GEFS holdout lost 7.3% with −0.98 Sharpe, and the frozen signal's
+next-open replay returned −7.1%. An edge too small to detect scatters results
+near zero; it does not produce losses of that size. So the answer is threefold —
+the information is largely impounded in the new-crop price by the time a weather
+model can compute it, whatever remains is below this archive's resolution at
+realistic costs, and the executed attempts lost money rather than hovering near
+zero.
+
+The [information and power report](analysis/corn_price_information_report.md)
+carries both tests, the drop-one influence columns, and the limits.
+
+Run: `PYTHONPATH=src python analysis/corn_price_information.py`
+
 ## Evidence and inference guardrails
 
 The analyses are deliberately not treated as equally conclusive.
@@ -906,6 +973,7 @@ reproduce.py             resumable end-to-end workflow
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
 - [x] One-command current-data reproduction workflow
 - [ ] Live USDA NASS validation and county production weights
+- [x] Information horse race against the new-crop price, and a power/cost budget
 - [ ] USDA report-day and explicit contract-roll controls
 - [x] A cost-aware market-neutral candidate that clears the paper-trading gate
 - [ ] Prospective paper-trading validation on data not used in this study
