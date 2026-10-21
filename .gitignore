@@ -8,6 +8,9 @@ data/
 node_modules/
 # Derived from data/ for the deck's charts
 presentation/**/chart_data.json
+# Derived from the committed analysis CSVs for the final deck's numbers
+presentation/**/deck_data.json
 presentation/previews/
+presentation/**/output/previews/
 # PowerPoint lock files
 ~$*
