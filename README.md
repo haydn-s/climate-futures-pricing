@@ -855,6 +855,14 @@ already archived keys are skipped, while changed content creates a new version.
 `nass_production` is excluded because it is not used by the reported results and
 requires a key; opt in with `--include-nass` after setting `NASS_API_KEY`.
 
+The `analysis` stage runs the eighteen analyses that execute from keyless public
+data. Twelve others are deliberately absent, because the dated-contract studies
+need the licensed LSEG panel, the GEFS studies need decoded operational GRIB2
+files, and the USDA Crop Progress validation needs both; `initial_analysis.py`
+is omitted separately as superseded proposal-era exploration. Their committed
+reports, result CSVs and source fingerprints are in the repository, so those
+findings remain auditable, but this command cannot regenerate them.
+
 To rerun the research and tests from existing processed tables without contacting
 any source:
 
@@ -979,7 +987,7 @@ reproduce.py             resumable end-to-end workflow
 - [x] Locked dated-contract USDA Crop Progress execution frame and validation protocol
 - [x] USDA Crop Progress development evaluation; gate failed and 2026 stayed sealed
 - [ ] Dated ICE cocoa margin history and capital-constrained replay (deferred after gate failure)
-- [x] One-command current-data reproduction workflow
+- [x] One-command current-data reproduction workflow for the keyless analyses
 - [ ] Live USDA NASS validation and county production weights
 - [x] Information horse race against the new-crop price, and a power/cost budget
 - [ ] USDA report-day and explicit contract-roll controls

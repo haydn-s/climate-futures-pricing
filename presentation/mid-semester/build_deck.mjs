@@ -1,3 +1,16 @@
+// ============================================================================
+// THIS BUILDER NO LONGER RUNS. It is kept as the provenance of a submitted
+// artifact, not as a working tool. See README.md in this directory.
+//
+// It resolves two hardcoded paths into the Codex runtime: the presentations
+// skill pinned to version 26.1011.11113, which no longer exists on this
+// machine, and a runtime-specific Python. There is also no package.json here
+// to reinstall `@oai/artifact-tool` from, so `node build_deck.mjs` fails at
+// import resolution before any of this code executes.
+//
+// The final deck is built by presentation/final, which uses plain npm and
+// derives its numbers from the committed analysis CSVs. Build that instead.
+// ============================================================================
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
