@@ -142,77 +142,112 @@ function kit(pres) {
 }
 
 // ------------------------------------------------------------------ notecards
-// One card per slide: prompts, not a script, with a time budget for a
-// 12-minute slot and the cumulative mark to leave each slide by.
+// One card per slide: prompts, not a script. Each carries its own length, the
+// cumulative mark to leave that slide by for a 12-minute slot, and -- where a
+// slide invites an obvious challenge -- the answer to it. The anticipated
+// questions matter more than the prompts: the argument is unusual enough that
+// most of the risk is in the Q&A rather than in the delivery.
 const NOTECARDS = {
   title: `0:20  ·  leave by 0:20
 
 • Haydn Stucker · AIPI 590 final
-• One sentence: free weather data measures a corn supply shock, and the market has already priced it
-• Road map: what worked, what failed, and why the two sit together`,
+• The whole project in one sentence: free weather data measures a real corn supply shock, and the futures market has already priced it
+• Road map: what worked, what failed, why, and who can still use it`,
 
-  arc: `1:10  ·  leave by 1:30
+  arc: `1:00  ·  leave by 1:20
 
 • Two tests from the proposal: MEASURE the physical shock, PREDICT tradeable returns
-• Measurement worked; prediction did not — and that is not a contradiction
-• Since the midterm the question changed from "did it work" to "where does the result live"
-• Everything that follows concentrates on one season: 2012`,
+• Measurement worked, prediction did not — and that is not a contradiction, it is what an efficient market looks like
+• Flag the second number now: every result has a "with 2012 removed" column
+• Tell them to watch for it. It is the spine of the whole deck`,
 
-  measurement: `1:30  ·  leave by 3:00
+  measurement: `1:25  ·  leave by 2:45
 
 • County heat and drought beat a training-only trend forecast on held-out harvests
 • Forward validation: train only on earlier years, refit the trend inside every fold
-• ${pct(D.supply_risk.r2_all_years)} of trend error removed across ${D.supply_risk.test_years} harvests, ${pct(D.supply_risk.r2_excluding_2012)} with 2012 refitted out
-• Both positive — that is the defensible claim, and it is narrower than it sounds`,
+• ${pct(D.supply_risk.r2_all_years)} of trend error removed across ${D.supply_risk.test_years} harvests; ${pct(D.supply_risk.r2_excluding_2012)} with 2012 refitted out
+• Both positive — that is the defensible claim, and it is narrower than it sounds
+• The footnote matters: county data reached only 3 of 26 seasons in time to be used
 
-  concentration: `1:40  ·  leave by 4:40
+IF ASKED — "why not just benchmark against USDA's own yield forecast?"
+  Fair, and it is the obvious next comparison. USDA condition ratings are in the
+  archive from 2012. The benchmark here is a trend forecast because that is what
+  someone with no weather data can always build; USDA's forecast would be a
+  stronger bar and is honest future work.`,
+
+  concentration: `1:35  ·  leave by 4:20
 
 • Withhold any single harvest and the score stays between ${sign(D.supply_risk.influence_low)} and ${sign(D.supply_risk.influence_high)}
-• No single removal flips the sign, so the result is not one season's artifact
+• No single removal flips the sign — so it is not one season's artifact
 • But the skill is concentrated: ${sign(D.supply_risk.severity_high_r2)} in the most extreme third of seasons
-• In the calmest third without 2012 it is ${sign(D.supply_risk.severity_low_r2_ex2012)} — worse than doing nothing
-• So: a damage-function model. It works when the crop is failing.`,
+• In the calmest third without 2012: ${sign(D.supply_risk.severity_low_r2_ex2012)} — worse than doing nothing
+• Land the characterisation: this is a damage function, and it works when the crop is failing
 
-  uncertainty: `1:40  ·  leave by 6:20
+IF ASKED — "isn't 2012 just an outlier you should drop?"
+  Two different tests, both reported. Dropping it from the SCORE leaves ${sign(D.supply_risk.influence_low)}.
+  Dropping it from TRAINING and refitting every fold leaves ${sign(D.supply_risk.r2_excluding_2012)}. Neither
+  removes the result. But it is the season doing the most work, and the strata
+  say where the rest of the work happens.`,
+
+  uncertainty: `1:30  ·  leave by 5:50
 
 • A point forecast is not a risk estimate — a buyer needs the spread
-• Jackknife+ intervals, calibrated only on earlier harvests, coverage measured not assumed
-• ${D.uncertainty.covered}/${D.uncertainty.harvests} covered at a nominal ${pct(D.uncertainty.nominal_level)} — but the guarantee is only ${pct(D.uncertainty.guaranteed_level)}
-• ${D.uncertainty.tightest_year} clears the bound by ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha. Every narrower construction misses it
-• The price of that coverage: ±${num(D.uncertainty.half_width_pp, 1)}% of trend yield`,
+• Jackknife+, calibrated only on earlier harvests; coverage measured, not assumed
+• ${D.uncertainty.covered}/${D.uncertainty.harvests} at a nominal ${pct(D.uncertainty.nominal_level)} — but be honest that the guarantee is only ${pct(D.uncertainty.guaranteed_level)}
+• ${D.uncertainty.tightest_year} clears its bound by ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha; every narrower construction misses it
+• The price of that coverage is ±${num(D.uncertainty.half_width_pp, 1)}% of trend yield. That is the usable resolution
 
-  efficiency: `2:00  ·  leave by 8:20
+IF ASKED — "16 observations is too few to calibrate anything"
+  Agreed, and that is why the method is distribution-free rather than Gaussian,
+  and why coverage is reported with its resolution: one season is worth 6.25
+  points. Split conformal would have been cleaner still but cannot reach 90%
+  until 2019 on this sample — that trade-off is in the report.`,
 
-• Why doesn't it trade? Three reasons, separated — not one excuse
-• Race run on the HARVEST, not returns: who knew what, the market or the model?
-• December contract explains ${num(D.efficiency.price_r2, 3)}, the nowcast ${num(D.efficiency.nowcast_r2, 3)}, together only ${num(D.efficiency.joint_r2, 3)}
-• The nowcast adds ${sign(D.efficiency.incremental_r2)} on top of the price, and ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012
-• Second: break-even R² is ${D.efficiency.detection_ratio.toFixed(0)}× below what ${D.efficiency.observations_available} returns can detect
-• Third — and this is the honest part — the backtests lost money, which an invisible edge would not do`,
+  nulls: `1:15  ·  leave by 7:05
 
-  provisioning: `1:50  ·  leave by 10:10
-
-• Who can use this? Not a speculator — a buyer who already holds the exposure
-• Price-free by construction: no futures position, loss depends on the harvest alone
-• Saves ${pct(D.provisioning.saving_all_years)} of provisioning cost against a no-weather baseline
-• Control: the model is the NARROWER distribution (${num(D.provisioning.spread_ratio)}×), so it is not just over-provisioning
-• Without 2012: ${pct(D.provisioning.saving_excluding_2012)}, but the bootstrap straddles zero — insurance, not a planning tool`,
-
-  nulls: `1:10  ·  leave by 11:20
-
-• Every promoted candidate was frozen before its final test, and every one failed
+• Now the other half. Every promoted candidate was frozen before its final test
 • GEFS sealed holdout: ${pct(D.trading_nulls.gefs_holdout_net, 1)} over ${D.trading_nulls.gefs_holdout_trades} trades, Sharpe ${num(D.trading_nulls.gefs_holdout_sharpe)}
 • USDA Crop Progress: ${pct(D.trading_nulls.usda_net, 1)}, positive in ${D.trading_nulls.usda_positive_years} of ${D.trading_nulls.usda_years} years
-• Nothing was retuned after a gate failed. The 2026 holdout stays sealed.
-• This is the result, not a setback`,
+• Seven predeclared checks failed, so the 2026 holdout was never opened
+• Say it plainly: nothing was retuned after a gate failed. The avenue was closed
+• This is the result, not a setback — the next slide is why`,
 
-  close: `0:40  ·  leave by 12:00
+  efficiency: `2:00  ·  leave by 9:05
 
-• Free climate data measures a corn supply shock — in the seasons that matter
+• The most interesting slide. Three separate reasons, not one excuse
+• ONE — already priced. Race run on the HARVEST, not returns: who knew what?
+• December contract explains ${num(D.efficiency.price_r2, 3)}, nowcast ${num(D.efficiency.nowcast_r2, 3)}, together only ${num(D.efficiency.joint_r2, 3)} — same information
+• Nowcast adds ${sign(D.efficiency.incremental_r2)} on top of the price; ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012
+• TWO — below resolution. Break-even sits ${D.efficiency.detection_ratio.toFixed(0)}× under what ${D.efficiency.observations_available} returns can detect
+• THREE — and this is the honest part — it lost money, which an invisible edge would not do
+
+IF ASKED — "so could a bigger sample find an edge?"
+  Possibly, and the deck says so rather than hiding it: at 10 bps you would need
+  about ${D.efficiency.observations_needed.toLocaleString()} independent returns against the ${D.efficiency.observations_available} available. But that
+  cuts both ways. The losses are far too large to be a small positive edge, so
+  the power argument bounds the evidence, it does not rescue the model.`,
+
+  provisioning: `1:45  ·  leave by 10:50
+
+• So who can use this? Not a speculator — a buyer who already holds the exposure
+• Their payoff is a lower chance of being caught short, which survives in an efficient market
+• Price-free by construction: no futures position anywhere in the test
+• Saves ${pct(D.provisioning.saving_all_years)} of provisioning cost against a no-weather baseline
+• The control that matters: the model is the NARROWER distribution (${num(D.provisioning.spread_ratio)}×), so this is not just over-provisioning
+• Without 2012: ${pct(D.provisioning.saving_excluding_2012)}, but the bootstrap straddles zero. Insurance, not a planning tool
+
+IF ASKED — "why not put a dollar figure on it?"
+  Because a dollar figure needs a price, and a price is how the rejected trading
+  signal would sneak back in. Costs are in holding-cost units; converting scales
+  every strategy identically and changes no ranking.`,
+
+  close: `0:40  ·  leave by 11:30
+
+• Free climate data measures a real supply shock — in the seasons that matter
 • The market has already priced it by the time the model can compute it
 • The estimate is insurance for someone holding the risk, not an edge
-• Everything is reproducible: locked protocols, committed outputs, sealed holdouts
-• Questions`,
+• Everything is reproducible: locked protocols, committed outputs, sealed holdouts that stayed sealed
+• Questions — and ~30 seconds of buffer if the earlier slides ran long`,
 };
 
 // ------------------------------------------------------------------ slides
@@ -245,8 +280,8 @@ const SLIDE_FNS = {
       K.text(s, answer, { x: x + 0.45, y: 3.72, w: w - 0.9, h: 0.4, fontSize: 15, bold: true, color });
     });
     K.card(s, M, 4.65, CW, 1.55, C.greenSoft);
-    K.text(s, 'THE THROUGH-LINE', { x: M + 0.45, y: 4.9, w: 4, h: 0.3, fontSize: 12, bold: true, color: C.goldText, charSpacing: 1.5 });
-    K.text(s, `Every strand of this project concentrates on one season. Remove ${D.supply_risk.most_load_bearing_year} and the measurement weakens, the interval tightens, the decision value stops being detectable, and the market’s informational advantage disappears along with it.`,
+    K.text(s, 'WHAT TO WATCH FOR', { x: M + 0.45, y: 4.9, w: 4, h: 0.3, fontSize: 12, bold: true, color: C.goldText, charSpacing: 1.5 });
+    K.text(s, `Every result that follows carries a second number: the same test with ${D.supply_risk.most_load_bearing_year} removed and every fold refitted. One drought season recurs in all of them, and how much each result depends on it is the honest measure of what this project established.`,
       { x: M + 0.45, y: 5.25, w: CW - 0.9, h: 0.8, fontSize: 15, color: C.ink, lineSpacingMultiple: 1.25 });
     K.footer(s, 'Both tests use the same point-in-time archive and the same publication-aware feature construction.');
     return s;
@@ -258,20 +293,20 @@ const SLIDE_FNS = {
       'County weather and drought beat a training-only trend forecast on held-out harvests');
     const d = D.supply_risk;
     [
-      [sign(d.r2_all_years), `R² vs trend across ${d.test_years} forward-validated harvests`, C.green],
-      [sign(d.r2_excluding_2012), 'the same, with 2012 removed from training and refitted', C.green],
-      [num(d.mae_all_years), `mean absolute error, t/ha, against the trend’s ${num(d.trend_mae_all_years)}`, C.ink],
+      [sign(d.r2_all_years), `R² vs trend, ${d.test_years} forward-validated harvests`, C.green],
+      [sign(d.r2_excluding_2012), 'the same test, 2012 removed and refitted', C.green],
+      [num(d.mae_all_years), `t/ha mean error, against the trend’s ${num(d.trend_mae_all_years)}`, C.ink],
     ].forEach(([value, caption, color], i) => {
       const w = (CW - 0.8) / 3;
       const x = M + i * (w + 0.4);
-      K.card(s, x, 1.95, w, 1.9);
-      K.stat(s, x, 2.15, w, value, caption, color, 42);
+      K.card(s, x, 1.95, w, 2.0);
+      K.stat(s, x, 2.2, w, value, caption, color, 42);
     });
-    K.card(s, M, 4.15, CW, 1.05, C.greenSoft);
-    K.text(s, 'Both samples positive. Every fold trains only on earlier harvests and refits the yield trend inside itself, so no held-out year helped define what counts as normal for itself.',
-      { x: M + 0.45, y: 4.4, w: CW - 0.9, h: 0.6, fontSize: 15, color: C.ink, lineSpacingMultiple: 1.2 });
-    K.text(s, 'This is a post-harvest attribution result. County weather is not published in time to inform an in-season decision — the availability audit found current-season county data in only 3 of 26 years.',
-      { x: M, y: 5.45, w: CW, h: 0.8, fontSize: 14, color: C.muted, lineSpacingMultiple: 1.2 });
+    K.card(s, M, 4.3, CW, 0.95, C.greenSoft);
+    K.text(s, 'Positive in both samples. Every fold trains only on earlier harvests and refits the yield trend inside itself, so no held-out year helped define what counts as normal for itself.',
+      { x: M + 0.45, y: 4.52, w: CW - 0.9, h: 0.55, fontSize: 15, color: C.ink, lineSpacingMultiple: 1.2 });
+    K.text(s, 'But this is post-harvest attribution, not an in-season forecast: county weather reached only 3 of 26 growing seasons in time to be used.',
+      { x: M, y: 5.5, w: CW, h: 0.5, fontSize: 14, color: C.muted, lineSpacingMultiple: 1.2 });
     K.footer(s, 'Metric: R² against each fold’s own trend forecast. Source: corn_yield_forward_validation_results.csv.');
     return s;
   },
@@ -279,7 +314,7 @@ const SLIDE_FNS = {
   concentration: (pres, K, I, F) => {
     const s = pres.addSlide();
     K.header(s, 'Where the result actually lives',
-      'Not one season — but concentrated in the seasons that went wrong');
+      'Not a single-season artifact — but concentrated in the seasons that went wrong');
     K.figure(s, F.strata, { x: M, y: 1.75, w: CW, h: 2.85 });
     const d = D.supply_risk;
     [
@@ -315,13 +350,13 @@ const SLIDE_FNS = {
   efficiency: (pres, K, I, F) => {
     const s = pres.addSlide();
     K.header(s, 'Why it does not become a trade',
-      'Three separate reasons, not one excuse');
+      'Three separate reasons for that result — not one excuse for it');
     K.figure(s, F.efficiency, { x: M, y: 1.7, w: CW, h: 2.6 });
     const d = D.efficiency;
     [
       [I.scaleWhite, 'ALREADY PRICED', `The December contract explains ${num(d.price_r2, 3)} of the harvest on its own. The nowcast adds ${sign(d.incremental_r2)}, and ${sign(d.incremental_r2_excluding_2012)} without 2012.`, C.green],
       [I.searchWhite, 'BELOW RESOLUTION', `Break-even is an R² of ${d.break_even_r2.toFixed(5)}; ${d.observations_available} independent returns can only detect ${d.detectable_r2.toFixed(5)}. A factor of ${d.detection_ratio.toFixed(0)}.`, C.gold],
-      [I.warnWhite, 'AND IT LOST MONEY', 'An edge too small to detect scatters results near zero. It does not produce a 52% loss. That is evidence in its own right.', C.red],
+      [I.warnWhite, 'AND IT LOST MONEY', 'The losses on the previous slide are the strongest sign. An edge too small to detect scatters near zero — it does not lose 52%.', C.red],
     ].forEach(([icon, head, body, color], i) => {
       const w = (CW - 0.7) / 3;
       const x = M + i * (w + 0.35);
@@ -336,7 +371,7 @@ const SLIDE_FNS = {
   provisioning: (pres, K, I, F) => {
     const s = pres.addSlide();
     K.header(s, 'Who can still use it',
-      'A buyer holding the exposure, not a speculator — and the test is price-free');
+      'Not a speculator — someone who already holds the risk, tested without any price');
     K.figure(s, F.decisions, { x: M, y: 1.75, w: CW, h: 2.8 });
     const d = D.provisioning;
     [
@@ -407,8 +442,15 @@ const SLIDE_FNS = {
 };
 
 // Deck order, as presented. Reorder these keys to reorder the deck.
+//
+// The chain is claim, qualify, quantify, counter-evidence, explanation,
+// resolution. `nulls` precedes `efficiency` deliberately: the losses are the
+// evidence and the three reasons are the explanation, so showing the
+// explanation first would have the deck accounting for a result the audience
+// has not seen. `provisioning` is penultimate so the argument ends on what the
+// work is good for rather than on what failed.
 const ORDER = ['title', 'arc', 'measurement', 'concentration', 'uncertainty',
-  'efficiency', 'provisioning', 'nulls', 'close'];
+  'nulls', 'efficiency', 'provisioning', 'close'];
 
 // ------------------------------------------------------------------ build
 async function writeDeck(file, keys, I, F) {
