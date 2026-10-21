@@ -24,6 +24,12 @@ The central result is a useful asymmetry:
   three fixed issue dates in the full sample. Removing 2012 leaves negative
   R² versus trend at every date; the weather-only August result is modestly
   positive. County history lacks the vintages needed for the same early test.
+- **The full-season score is not one season, but it is concentrated in bad
+  ones.** Withholding any single harvest leaves the county-plus-drought result
+  between +0.666 and +0.775, or +0.333 and +0.525 in the refitted run without
+  2012, with no sign change in either. The remaining positive August nowcast
+  figure does flip sign. Skill is concentrated in the seasons furthest from
+  trend and is negative in the calmest third once 2012 is removed.
 - **The public-data trading signal does not.** Published observations and CPC
   6–10/8–14 day forecasts produce approximately zero or negative out-of-sample
   return R-squared across the tested horizons and model families.
@@ -62,6 +68,7 @@ repeatable return forecast.
 | Question | Current answer | Evidence level |
 |---|---|---|
 | Can free climate data measure crop supply shocks? | Yes for US corn; county weather plus drought materially outperforms five representative points and training-only trend forecasts. | Leave-one-year-out measurement across 26 harvests plus chronological forecasts for 2010–2025; revised historical data, not an untouched holdout. |
+| Which harvests does that measurement result rest on? | Not one: no single withheld season changes the sign of the full-season score. But the skill concentrates in the seasons furthest from trend and turns negative in the calmest third once 2012 is refitted out. | Per-harvest errors, single-season score influence, and descriptive severity/drought/heat/era strata over the 16 scored forecasts. |
 | Does the market move before or after drought data is published? | Both occur. Large events show more average return after publication, while the pre-publication move is concentrated in corn's pollination window. | Exploratory event evidence: only 3–22 usable events per cell, depending on the cut. |
 | Does the risk score predict futures returns? | No detectable skill in the tested daily or weekly models. | Forward expanding-window backtests with a target-horizon embargo. |
 | Do public forecasts add information? | CPC outlooks predict subsequent weather, but neither forecast levels nor revisions predict corn returns. | 2012–2026 forecast sample; best tradeable result is effectively zero. |
@@ -154,6 +161,46 @@ and case-study figures, the county availability audit, source fingerprints,
 and links to the feature and prediction CSVs.
 
 Run: `PYTHONPATH=src python analysis/corn_yield_nowcast.py`
+
+A third pass decomposes those two scores rather than computing a new one. It
+reads the committed prediction CSVs, reports every harvest's error against its
+own trend baseline, withholds one season at a time from the score, and cuts the
+scored years by outcome severity, drought, heat, direction, and era.
+
+| Specification | R² vs trend | Range withholding any one harvest | Sign flips |
+|---|---:|---|---:|
+| Full season, counties + drought | +0.748 | +0.666 to +0.775 | 0 |
+| Same, 2012 excluded and refitted | +0.476 | +0.333 to +0.525 | 0 |
+| August 1 nowcast, points only, 2012 excluded | +0.072 | −0.048 to +0.162 | 1 |
+| August 1 nowcast, points + drought, 2012 excluded | −0.073 | −0.176 to +0.076 | 2 |
+
+Withholding a harvest from a score is not the `exclude_2012` sample, which also
+drops the season from training and refits every fold. It measures how much a
+published number leans on one observed outcome, and no row of it is a score to
+quote. On that test the full-season county result is not a single-season
+artifact: 2012 is its most load-bearing harvest, but removing it leaves +0.666,
+and no single removal changes the sign of either the full or the refitted run.
+The modest positive August nowcast figure does flip sign, so early-season skill
+from the available point data remains unsupported.
+
+The strata locate the skill. Across all evaluation years the third of seasons
+deviating most from trend scores +0.815 against a trend forecast already missing
+by 1.066 t/ha, while the calmest third scores +0.336 against a trend error of
+0.164 t/ha; in the refitted run without 2012 that calmest third falls to −0.452.
+The model earns its score in the seasons that went wrong and adds little or
+nothing in the ones that did not, which is the expected shape for a supply-risk
+measure but means the aggregate R² should not be read as accuracy in a typical
+year. It is close to symmetric in direction, scoring +0.735 on harvests below
+trend against +0.777 on those above, so it behaves as a two-sided weather-to-
+yield measure rather than only as a drought-damage detector. The weaker recent
+era is primarily a denominator effect: those harvests sat close to trend, so
+there was little trend error available to remove.
+
+The [decomposition report](analysis/corn_yield_strata_report.md) carries the
+per-harvest table, the full influence grid for every specification and issue
+date, all strata, and the figure.
+
+Run: `PYTHONPATH=src python analysis/corn_yield_strata.py`
 
 ### 2. Published observations do not forecast returns
 
@@ -726,6 +773,10 @@ reproduce.py             resumable end-to-end workflow
 - [x] Content-addressed, publication-aware public-data pipeline
 - [x] County and point weather, drought, price, yield, and CPC forecast features
 - [x] Corn yield validation with honest trend fitting
+- [x] Forward-year and fixed-date corn yield evaluation against trend baselines
+- [x] Per-harvest, single-season influence, and crop-year strata decomposition
+- [ ] Calibrated predictive intervals for the corn supply-risk estimates
+- [ ] Decision-utility demonstration for a hedger or physical grain buyer
 - [x] Daily and weekly forward return backtests
 - [x] Raw and market-neutral ML signals with nested, cost-aware evaluation
 - [x] Frozen v1 model card, data hashes, and auditable paper-signal command
