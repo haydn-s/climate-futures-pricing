@@ -279,12 +279,12 @@ and costs are in holding-cost units so no price is needed.
 
 | Sample | Penalty | Cost vs climatology | Bootstrap 2.5% | P(saving > 0) |
 |---|---:|---:|---:|---:|
-| All years | 2:1 | −40.3% | −0.017 | 95% |
-| All years | 4:1 | −53.1% | −0.147 | 88% |
-| All years | 8:1 | −56.0% | **+0.061** | 98% |
-| 2012 excluded | 2:1 | −18.6% | −0.052 | 87% |
-| 2012 excluded | 4:1 | −14.4% | −0.238 | 66% |
-| 2012 excluded | 8:1 | −14.5% | −0.236 | 71% |
+| All years | 2:1 | −40.3% | −0.017 | 95.0% |
+| All years | 4:1 | −53.1% | −0.147 | 88.0% |
+| All years | 8:1 | −56.0% | **+0.061** | 98.4% |
+| 2012 excluded | 2:1 | −18.6% | −0.052 | 86.8% |
+| 2012 excluded | 4:1 | −14.4% | −0.238 | 66.3% |
+| 2012 excluded | 8:1 | −14.5% | −0.236 | 70.5% |
 
 The saving is not conservatism. An asymmetric loss rewards a wider distribution
 for its own sake, so a control hands the no-weather user the model's spread
