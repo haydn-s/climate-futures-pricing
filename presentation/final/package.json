@@ -1,0 +1,20 @@
+{
+  "name": "climate-futures-pricing-final-deck",
+  "private": true,
+  "description": "Builds the final deck from the project's own committed analysis outputs",
+  "scripts": {
+    "build": "node build_deck.js \"output/Final Presentation.pptx\"",
+    "previews": "node build_deck.js output/previews --single",
+    "data": "python3 deck_data.py",
+    "pdf": "python3 export_pdf.py",
+    "deliverable": "npm run data && npm run build && npm run pdf"
+  },
+  "dependencies": {
+    "jszip": "^3.10.2",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-icons": "^5.7.0",
+    "sharp": "^0.35.4"
+  }
+}

@@ -2,9 +2,20 @@
 """Rebuild the current project from public inputs, one resumable stage at a time.
 
 The default runs the complete keyless workflow: fetch, clean, build the canonical
-corn panel, execute every current analysis, and run the offline test suite. Raw
-fetches are content-addressed and skipped when already archived, so rerunning the
-command resumes rather than replacing prior data.
+corn panel, execute every analysis that runs from keyless public data, and run
+the offline test suite. Raw fetches are content-addressed and skipped when
+already archived, so rerunning the command resumes rather than replacing prior
+data.
+
+WHAT THIS DOES NOT RUN, AND WHY. Twelve analyses in `analysis/` are absent from
+`ANALYSES` below because they cannot execute from public inputs alone: the
+dated-contract studies need the licensed LSEG panel, the GEFS studies need
+decoded operational GRIB2 files, and the USDA Crop Progress validation needs
+both. Their committed reports, result CSVs and source fingerprints are in the
+repository, so their findings are auditable, but this command cannot regenerate
+them and does not pretend to. `analysis/initial_analysis.py` is omitted for a
+different reason: it is the proposal-era exploration, superseded by the current
+scripts and kept only as history.
 
 Examples:
 
@@ -37,6 +48,9 @@ KEYLESS_SOURCES = (
     "nclimgrid",
     "cpc_outlook",
 )
+# Keyless analyses only, in dependency order. Anything needing licensed LSEG
+# contracts, GEFS GRIB2 files, or a NASS key is deliberately absent; see the
+# module docstring.
 ANALYSES = (
     "analysis/corn_yield_model.py",
     "analysis/corn_yield_forward_validation.py",

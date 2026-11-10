@@ -108,6 +108,42 @@ $100,000 of starting capital. Detailed methods and the sensitivity grid are in
 The capital results and source hashes are in
 [`../../analysis/lseg_capital_simulation_report.md`](../../analysis/lseg_capital_simulation_report.md).
 
+## Why this class of signal fails, and what the evidence can bound
+
+Two tests added on October 20, 2026 explain the negative results above rather
+than merely restating them. Neither refits this model or any other; both are in
+[`../../analysis/corn_price_information_report.md`](../../analysis/corn_price_information_report.md).
+
+**The information is largely already in the price.** Regressing the realised
+corn yield deviation on the published weather nowcast, on the contemporaneous
+new-crop December contract change since April 1, and on both together asks who
+knew what. Across 14 harvests the nowcast explains 0.710 of the deviation and
+the December price 0.676, but together they reach only 0.797 — they are mostly
+explaining the same thing. The nowcast adds +0.120 on top of the price, its
+coefficient retains 61% of its standalone value, and the whole-harvest bootstrap
+on that coefficient does not exclude zero. Excluding 2012 it adds +0.001. A
+weather feature set cannot supply an edge the futures price has already
+impounded by the time the feature can be computed.
+
+**This archive could not have detected a marginally profitable signal.** For a
+sign rule on 4.48% five-day growing-season returns, break-even against a
+ten-basis-point round trip is a return R² of 0.00078, while the 781 independent
+growing-season returns available can only distinguish 0.01005 from zero at 80%
+power — a factor of 13, requiring about 10,019 observations. At the 24 bps that
+per-contract commission and slippage actually cost, break-even is 0.00451 and
+still undetectable. **A band of signal strengths exists that would be profitable
+and invisible here, and this model's null results cannot rule them out.**
+
+That bound is a statement about resolution and must not be read as a defence of
+v1. The failures recorded above are not near-zero scatter: the locked USDA Crop
+Progress model lost 52.7% after costs, the sealed GEFS holdout lost 7.3% with
+−0.98 Sharpe, and this model's own next-open replay returned −7.1%. An edge too
+small to detect does not produce losses of that size. The correct reading is
+that the negative evidence is strong against a *large* edge, silent about a
+*marginal* one, and corroborated by the execution attribution's finding that
+real per-contract costs removed far more than the ten-basis-point bridge
+assumed.
+
 ## Limitations and prohibited uses
 
 - Yahoo continuous series do not model executable contracts, rolls, margins,
@@ -122,6 +158,15 @@ The capital results and source hashes are in
   the record. Stale or structurally missing inputs should block paper execution.
 - This model must not place orders, provide personalized financial advice, or be
   represented as validated for live trading.
+- The negative evidence bounds a large edge, not a marginal one. At the costs
+  that apply, a profitable signal could be an order of magnitude below this
+  archive's detection floor, so "no skill found" must not be restated as "no
+  skill exists". See the section above.
+- This model is a returns forecaster and carries no calibrated uncertainty. The
+  interval and decision-utility work in the project applies to the corn
+  supply-risk estimator, a different model documented in
+  [`../corn-supply-risk-counties-drought-v1/MODEL_CARD.md`](../corn-supply-risk-counties-drought-v1/MODEL_CARD.md),
+  and none of its coverage or provisioning results transfer here.
 
 ## Prospective validation
 
@@ -149,3 +194,15 @@ Its first registration is an ineligible `OPERATIONAL_HOLD`: the latest archived
 decision was already 18 days old. This verifies that the ledger refuses to call
 a late decision prospective. The first evidentiary observation must be a future
 same-day registration.
+
+**Status as of October 20, 2026: still one registration, still ineligible, and
+no resolved outcomes.** The ledger holds a single decision with
+`eligible_for_prospective_evidence: false`, where the raw model said `SELL` and
+the staleness rule forced `HOLD`. The prospective campaign has therefore
+produced no evidence of any kind. Accumulating a usable sample needs a refreshed
+archive, a same-day non-`HOLD` registration, and five sessions per outcome; at
+the weekly decision cadence that is a handful of trades per quarter. Given that
+this project's own gates rejected 14-trade and 131-trade samples, no prospective
+conclusion should be drawn or reported until a sample far larger than that has
+accumulated, and the absence of one must be stated plainly rather than filled
+with the single `HOLD` record.
