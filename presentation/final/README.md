@@ -1,85 +1,116 @@
-# Final deck
+# Final presentation
 
-`output/Final Presentation.pptx` — 9 slides for the November 18 final
-presentation, with a speaker notecard on every slide (a time budget, a
-cumulative "leave by" mark, and short cues) budgeted for **8 minutes of
-speaking followed by 2 minutes of questions**.
+Submit **[output/Final Presentation.pdf](output/Final%20Presentation.pdf)** on
+Canvas by **1:30 PM Eastern, Wednesday, November 18, 2026**. The updated
+[course guidelines](guidelines.pdf) require PDF only and a **10-minute hard stop**.
+The Canvas upload link is to be provided by the course. This repository prepares
+the deliverable; it does not submit it.
 
-At that budget a slide averages under a minute, so the notecards are cues
-rather than sentences. Five of them carry an `IF ASKED` block answering the
-challenge that slide invites, and the closing card indexes all five: with a
-dedicated Q&A, most of the risk sits in the two minutes after the talk.
+The editable [PowerPoint](output/Final%20Presentation.pptx) contains **12 slides**
+and speaker notecards budgeted for **8 minutes of speaking plus 2 minutes of
+questions**. The guidelines do not prescribe that split; it retains the deck's
+existing question allowance. Rehearsal is still needed to confirm actual pacing.
+The PDF contains the same slides, without presenter notes.
 
-## Why this replaces the mid-semester builder
+## Coverage of the updated guidelines
 
-`presentation/mid-semester/build_deck.mjs` hardcodes two paths into the Codex
-runtime: a presentations skill pinned to version `26.1011.11113`, and a
-runtime-specific Python. The pinned skill version no longer exists — only
-`26.1017.11052` does — so that deck can no longer be rebuilt, and it had no
-`package.json` to reinstall from either.
+All six starred topic groups appear on the slides, not only in notes. Optional
+topics are included where the project supports them. The final slide closes
+with next steps as the guidelines recommend.
 
-This deck instead uses the same self-contained toolchain as the proposal deck:
-plain npm, `pptxgenjs`, `sharp`. Everything it needs is declared in
-`package.json`, so `npm install` is enough on any machine.
+| Guideline | Slide(s) | What the audience sees |
+|---|---|---|
+| Project Recap* | 2 | Problem, target users, why supply risk and false trading signals matter, intended impact |
+| Final Product Solution* | 3 | Implemented research package and explicit midsemester-to-final comparison |
+| Data & Model* | 4–5 | Named sources, geographic aggregation, publication timing, training-only transformations, baseline creation and model selection |
+| Evaluation & Performance* | 6–9 | R² versus trend, MAE, coverage, net returns/Sharpe and a buyer-cost example; improvements in evaluation since midsemester |
+| Risks & Responsible AI* | 7, 10 | Coverage limits, geographic bias, calm-season failures, stale/revised inputs, human review and unsupported uses |
+| Conclusion & Reflection* | 12 | Final outcome, lesson, why physical risk measurement matters and concrete next steps |
+| Product Experience (optional) | 7, 9 | Actual interval outputs and a worked buyer-buffer example; no live demo dependency |
+| Synthetic Data (if used) | 4 | No synthetic training data; distinguish historical resampling from simulated decision costs |
+| Deployment & Real-World Feasibility | 11 | Implemented stack, proposed analyst-report integration, latency, costs, reliability and scaling limits |
+| Business Value & Impact | 2, 9 | Physical buyers as users, estimated buffer-cost benefit, proposed pilot, untested adoption |
+| What You'd Do Next | 12 | Prospective harvest, USDA benchmark, production weights and a buyer pilot with realistic costs |
+| Logistics | Deliverables above | PDF-only submission; 10-minute maximum; November 18 deadline |
 
-## The numbers cannot drift
+The comparison uses the submitted midsemester deck in
+[`../mid-semester/output/`](../mid-semester/output/). Its GEFS and USDA trading
+failures were already known; the final does not present them as new. The new
+chronological R² versus trend differs from the old leave-one-year-out R² in
+both folds and denominator, so the deck does not claim a comparable accuracy
+increase. The advance is stronger evaluation, uncertainty and decision context.
 
-The mid-semester deck hardcoded its figures inside the builder, which let slides
-and reports disagree silently. Here `deck_data.py` derives every quoted number
-from the **committed analysis CSVs** and writes `deck_data.json`, which the
-builder reads. A slide can only say what the repository says.
+## Speaking plan
 
-Each extraction carries an assertion about what it found. If a feature set is
-renamed, a column disappears, or a result moves far enough to contradict a claim
-on a slide, the build stops with a named error instead of emitting a deck full
-of quietly wrong numbers:
+| Slide | Topic | Speak for | Leave by |
+|---|---|---|---|
+| 1 | Title | 0:15 | 0:15 |
+| 2 | Problem and users | 0:30 | 0:45 |
+| 3 | Product and evolution | 0:50 | 1:35 |
+| 4 | Data and preparation | 0:55 | 2:30 |
+| 5 | Baselines and models | 0:50 | 3:20 |
+| 6 | Yield evaluation | 0:50 | 4:10 |
+| 7 | Uncertainty | 0:45 | 4:55 |
+| 8 | Trading evaluation | 0:40 | 5:35 |
+| 9 | Buyer example and value | 0:45 | 6:20 |
+| 10 | Risks and responsible use | 0:50 | 7:10 |
+| 11 | Production feasibility | 0:25 | 7:35 |
+| 12 | Reflection and next steps | 0:25 | 8:00 |
+| — | Questions | 2:00 | 10:00 |
 
-```
-DeckDataError: the full-season result is no longer positive in both samples;
-the deck's claim must be rewritten before it can be rebuilt
-```
+The notecards start with a duration and cumulative leave-by mark. Sources and
+optional Q&A details follow the speaking cues; they are not a script to read
+verbatim. The builder derives order and timing from one `PLAN` and rejects a
+schedule that differs from eight speaking minutes or exceeds the hard stop.
 
-The tripwires currently assert that the full-season result stays positive in
-both samples, that no single withheld harvest flips its sign, that 2012 stays
-inside its 90% interval, that the model remains the *narrower* distribution in
-the provisioning test, that the saving without 2012 still straddles zero, that
-the sample still cannot detect a profitable ten-basis-point signal, and that the
-locked trading results are still negative. Each one guards a specific sentence
-on a specific slide.
+## Rebuild both deliverables
 
-## Figures
-
-The four analysis figures are the analysis scripts' own SVGs, rasterised at
-build time rather than redrawn, so a chart cannot drift from the report it came
-from either. They are rendered at 300 dpi and downsampled to 2400 px wide —
-about 200 dpi at full-slide width, crisp on a projector without carrying a
-6000-pixel bitmap. Re-running an analysis script updates the slide.
-
-## Rebuild
+Use the project's Python environment (including pandas and pypdf), Node.js and
+LibreOffice. LibreOffice's `soffice` must be on PATH, at the standard macOS app
+location, or supplied through `SOFFICE=/path/to/soffice`.
 
 ```bash
-../../.venv/bin/python deck_data.py   # derives deck_data.json from ../../analysis
-npm install                           # pptxgenjs, sharp, react-icons
-npm run build                         # writes output/Final Presentation.pptx
+# From presentation/final/
+source ../../.venv/bin/activate
+npm ci
+npm run deliverable
 ```
 
-`npm run previews` writes one single-slide file per slide into
-`output/previews/`, which is useful for checking layout without scrolling a
-full deck.
+This regenerates `deck_data.json` from committed analysis CSVs, builds the
+PowerPoint, and exports the PDF. `export_pdf.py` uses an isolated temporary
+LibreOffice profile and checks that the PDF has the same number of slides,
+landscape pages and every visible text box from the PPTX. Only a successful
+conversion replaces the submission PDF. Inspect the rendered PDF after edits:
+text matching cannot detect clipped text, tiny chart labels or visual overlap.
 
-## Editing
+Individual commands remain available:
 
-- **Slide order** is the `ORDER` list near the bottom of `build_deck.js`.
-- **Speaker notes** are the `NOTECARDS` object; keys match `ORDER`.
-- **Numbers** are not edited here. Change the analysis, rerun it, rerun
-  `deck_data.py`. If a number needs to change on a slide but not in the
-  repository, the slide is wrong.
-- Editing the `.pptx` directly in PowerPoint works, but a rebuild overwrites it
-  — move anything worth keeping back into `build_deck.js`.
+```bash
+python deck_data.py
+npm run build       # PowerPoint only; does not refresh the submission PDF
+npm run pdf         # PDF from the current PowerPoint
+npm run previews    # single-slide PPTX files in output/previews/
+```
 
-## Status
+The deck keeps the self-contained `pptxgenjs`/`sharp` toolchain from the prior
+final version. It does not depend on a pinned Codex runtime. Figures are the
+analysis scripts' own SVGs, rasterized at build time to retain their provenance.
+They are image charts in PowerPoint; edit the analysis figure source to change
+them. Text remains editable.
 
-The structure, the data wiring, the figures and the notecards are in place and
-the build is proven end to end. **The wording is a first draft**: the argument
-is correct and sourced, but the phrasing, emphasis and the balance between
-slides are presentation decisions still worth a pass before submission.
+## Editing and evidence
+
+- `PLAN` in `build_deck.js` controls slide order and speaking time.
+- `SLIDE_FNS` controls slide content; `NOTECARDS` holds cues, sources and Q&A.
+- `deck_data.py` derives numerical findings and rejects changed results that
+  contradict the narrative. Do not insert replacement analysis numbers by hand.
+- Source citations live in speaker notes, preserving the local PowerPoint
+  edit that removed footer citations. Significant limits remain visible in the
+  submission PDF.
+- Direct PowerPoint edits are overwritten by a rebuild. Carry them into the
+  builder and rerun `npm run deliverable` before submission.
+
+The package is a research prototype. The county model uses revised full-season
+history, the yield model has no untouched holdout, and the buyer example uses
+the separate August point-weather variant with hypothetical costs. The slides
+retain these distinctions. No analysis was retuned for this presentation.

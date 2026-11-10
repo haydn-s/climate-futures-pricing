@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const pptxgen = require('pptxgenjs');
+const JSZip = require('jszip');
 const React = require('react');
 const ReactDOMServer = require('react-dom/server');
 const sharp = require('sharp');
@@ -50,10 +51,8 @@ const ICONS = {
   checkGreen: [fa.FaCheck, C.green], crossRed: [fa.FaTimes, C.red],
 };
 const FIGURES = {
-  strata: 'corn_yield_strata_influence.svg',
   intervals: 'corn_yield_intervals.svg',
   decisions: 'corn_yield_decisions.svg',
-  efficiency: 'corn_price_information.svg',
 };
 
 async function renderIcons() {
@@ -129,8 +128,8 @@ function kit(pres) {
     },
     // A big number with a caption under it, the deck's main statistical unit.
     stat(slide, x, y, w, value, caption, color = C.green, size = 40) {
-      text(slide, value, { x, y, w, h: 0.66, fontFace: HEAD, fontSize: size, bold: true, color, align: 'center', valign: 'middle' });
-      text(slide, caption, { x, y: y + 0.68, w, h: 0.58, fontSize: 12, color: C.muted, align: 'center', valign: 'top' });
+      text(slide, value, { x, y, w, h: 0.66, fontFace: BODY, fontSize: size, bold: true, color, align: 'center', valign: 'middle' });
+      text(slide, caption, { x, y: y + 0.68, w, h: 0.58, fontSize: 14, color: C.muted, align: 'center', valign: 'top' });
     },
     // Fit a figure inside a box, preserving its aspect ratio.
     figure(slide, fig, box) {
@@ -141,318 +140,279 @@ function kit(pres) {
   };
 }
 
-// ------------------------------------------------------------------ notecards
-// One card per slide, budgeted for EIGHT minutes of speaking followed by two
-// minutes of questions. Each carries its own length and the cumulative mark to
-// leave that slide by. At this budget a slide averages under a minute, so the
-// bullets are cues rather than sentences -- anything that reads like prose is
-// too long to glance at.
-//
-// The `IF ASKED` blocks are the Q&A asset. The argument is unusual enough --
-// a positive measurement, a negative trading result, and a power budget that
-// bounds the negative result without rescuing it -- that most of the risk sits
-// in the two minutes after the talk rather than in the talk. The close slide
-// indexes them.
+// ------------------------------------------------------------------ delivery plan
+// Eight minutes of speaking leaves two minutes for questions inside the hard stop.
+// The same plan drives order, notes and the build-time timing check.
+const PLAN = [
+  ['title', 15], ['recap', 30], ['product', 50], ['data', 55],
+  ['models', 50], ['measurement', 50], ['uncertainty', 45], ['nulls', 40],
+  ['provisioning', 45], ['risks', 50], ['deployment', 25], ['close', 25],
+];
+const ORDER = PLAN.map(([key]) => key);
+const SPEAKING_SECONDS = 8 * 60;
+const QUESTION_SECONDS = 2 * 60;
+const clock = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+// Short cues first. Sources and optional answers stay off the submitted slides.
 const NOTECARDS = {
-  title: `0:15  ·  leave by 0:15
+  title: `Haydn Stucker, AIPI 590 final, November 18, 2026.
+Public weather data can measure corn supply risk. The tested trading signals failed.`,
 
-• Haydn Stucker · AIPI 590 final
-• In one sentence: free weather data measures a real corn supply shock, and the futures market has already priced it`,
+  recap: `Problem: weather shocks put crop supply and buyers' budgets at risk.
+Original users: commodity analysts testing whether public climate data adds timing value.
+Final focus: corn buyers, feed mills, ethanol plants and lenders already exposed to supply risk.
+The intended impact is a better estimate of shortfall and uncertainty, with honest limits on use.
+Sources: README.md, research questions; models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md.`,
 
-  arc: `0:40  ·  leave by 0:55
+  product: `What exists: reproducible Python analysis, committed CSV forecasts and reports, a fixed model specification and model card. This is a research package, not a deployed application.
+The October 14 midsemester deck already reported the trading failures. Do not present those as new.
+Since then: chronological validation, earlier-data availability audit, uncertainty intervals, and a price-free buyer decision experiment.
+The original leave-one-year-out R² and the new R² versus trend use different folds and denominators. This is stronger evaluation, not a comparable score increase.
+Sources: presentation/mid-semester/output/Midterm Presentation.pptx, slides 6-9; analysis/corn_yield_forward_validation_report.md; analysis/corn_yield_intervals_report.md; analysis/corn_yield_decisions_report.md.`,
 
-• Two tests from the proposal: MEASURE the shock, PREDICT returns
-• Measurement worked, prediction did not — not a contradiction, it is what efficiency looks like
-• Flag the device: every result carries a "2012 removed" number. Tell them to watch it`,
+  data: `Weather: NOAA nClimGrid for 473 counties across five states; NASA POWER for five representative points; US Drought Monitor for drought.
+Targets: OWID/FAO annual national yield. USDA NASS provides progress releases and county production data, but production weights remain unimplemented.
+Trading inputs: NOAA CPC/GEFS forecasts, original USDA releases and dated LSEG futures.
+Preparation: aggregate to crop season and geography, retain explicit missingness, fit transforms only on earlier training data, align publication timestamps and next-open execution.
+The headline county model uses revised full-season history. The archive does not prove original-vintage availability.
+No synthetic training observations. Bootstraps resample historical harvests for uncertainty; the provisioning experiment uses a hypothetical cost function, not invented observed outcomes.
+Sources: README.md, Data inventory; analysis/corn_yield_forward_validation_report.md; docs/gefs_forecast_revisions.md; docs/crop_progress_releases.md.`,
 
-  measurement: `1:05  ·  leave by 2:00
+  models: `Supply model: national yield deviation from a training-only linear trend. Standardized Ridge with alpha=1 stays fixed from the original study, appropriate to a small annual sample.
+Headline inputs: July heat degree-days above 29 C, mean July maximum temperature and peak D2-or-worse drought coverage. Compare county inputs to five points on matched years.
+Baseline: fit the same yield trend without weather. Start after ten training years and refit trend and scaling in every expanding fold.
+Trading comparison: Ridge, logistic direction and shallow boosted trees, with hyperparameters selected inside earlier time folds. Beat market-only and simple-rule controls on matched costs and dates. Freeze before final testing.
+Sources: models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md; src/pipeline/yield_validation.py; docs/corn_wheat_final_validation_protocol.md; analysis/gefs_corn_holdout_report.md; analysis/nass_corn_progress_validation_report.md.`,
 
-• County heat and drought beat a training-only trend forecast on held-out harvests
-• Forward validation — train on earlier years only, refit the trend inside every fold
-• ${pct(D.supply_risk.r2_all_years)} of trend error removed; ${pct(D.supply_risk.r2_excluding_2012)} with 2012 refitted out
-• Both positive. Narrower than it sounds: county data reached only 3 of 26 seasons in time
+  measurement: `Success means lower held-out error than the trend-only control.
+R² versus trend = 1 - sum(model error squared) / sum(trend error squared).
+Forward R² ${sign(D.supply_risk.r2_all_years)} across ${D.supply_risk.test_years} harvests, or ${sign(D.supply_risk.r2_excluding_2012)} with 2012 removed from both training and testing.
+MAE ${num(D.supply_risk.mae_all_years, 3)} versus ${num(D.supply_risk.trend_mae_all_years, 3)} t/ha. Same years and fixed specification.
+No single omitted scoring year flips the result: ${sign(D.supply_risk.influence_low)} to ${sign(D.supply_risk.influence_high)}. This differs from refitting without 2012.
+Sources: analysis/corn_yield_forward_validation_results.csv; analysis/corn_yield_strata_influence_summary.csv.
+IF ASKED: USDA's own forecast is a stronger future benchmark. This benchmark isolates the value of weather against a forecast requiring no weather data.`,
 
-IF ASKED — "why not benchmark against USDA's own forecast?"
-  Fair, and the stronger bar. Condition ratings are in the archive from 2012.
-  A trend forecast is the benchmark because anyone can build it with no weather
-  data at all. USDA's forecast is honest future work.`,
+  uncertainty: `The output now includes uncertainty, beyond the midsemester point estimates.
+Jackknife+ refits within earlier training years only. The point forecast remains the fixed specification.
+${D.uncertainty.covered}/${D.uncertainty.harvests} covered at nominal ${pct(D.uncertainty.nominal_level)}, with average half-width ${num(D.uncertainty.half_width_pp, 1)}% of trend.
+2012 clears the bound by only ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha. The August point-weather nowcast covers ${D.uncertainty.nowcast_covered}/${D.uncertainty.nowcast_harvests} and misses ${D.uncertainty.nowcast_uncovered}.
+The theorem's ${pct(D.uncertainty.guaranteed_level)} lower bound requires exchangeability; an ordered yield series does not establish it. Report empirical coverage, not a future coverage guarantee.
+Sources: analysis/corn_yield_intervals_coverage.csv; analysis/corn_yield_intervals_predictions.csv; analysis/corn_yield_intervals_report.md.
+IF ASKED: sixteen harvests mean one miss changes coverage by 6.25 percentage points. A new harvest is the next independent test.`,
 
-  concentration: `1:05  ·  leave by 3:05
+  nulls: `Trading success required positive results after costs, stability, matched controls and frozen gates.
+GEFS: ${pct(D.trading_nulls.gefs_holdout_net, 1)} net and Sharpe ${num(D.trading_nulls.gefs_holdout_sharpe)} on ${D.trading_nulls.gefs_holdout_trades} sealed 2026 trades.
+USDA: ${pct(D.trading_nulls.usda_net, 1)} net, Sharpe ${num(D.trading_nulls.usda_sharpe)}, positive in ${D.trading_nulls.usda_positive_years}/${D.trading_nulls.usda_years} development years. Seven checks failed, so its 2026 holdout stayed sealed.
+These were already midsemester findings. The new explanation is a harvest information comparison: price R² ${num(D.efficiency.price_r2, 3)}, weather increment ${sign(D.efficiency.incremental_r2)}, or ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012.
+That is consistent with overlapping information, not proof of universal market efficiency. ${D.efficiency.observations_available} independent returns cannot rule out a small edge, but these candidates failed the deployment gate.
+Sources: analysis/gefs_corn_holdout_results.csv; analysis/nass_corn_progress_validation_results.csv; analysis/corn_price_information_race.csv; analysis/corn_price_information_budget.csv.`,
 
-• Withhold any single harvest: score stays ${sign(D.supply_risk.influence_low)} to ${sign(D.supply_risk.influence_high)}, no sign flip
-• So not one season's artifact — but concentrated
-• ${sign(D.supply_risk.severity_high_r2)} in the most extreme third; ${sign(D.supply_risk.severity_low_r2_ex2012)} in the calmest third without 2012
-• Land it: this is a damage function. It works when the crop is failing
+  provisioning: `Worked product example: a corn buyer uses the August 1 point-weather-and-drought distribution to choose a buffer before the harvest.
+At a stated ${D.provisioning.penalty_ratio}:1 shortfall penalty, cost falls ${pct(D.provisioning.saving_all_years)} against climatology; without 2012, ${pct(D.provisioning.saving_excluding_2012)}.
+This uses the timely point-weather variant, not the headline full-season county model. Costs are simulated holding-cost units, not realized dollars or trading profits.
+The model's spread is ${num(D.provisioning.spread_ratio)} times the baseline's; it does not win simply by widening every buffer.
+The bootstrap includes zero at this penalty even with all years, and without 2012 P(saving > 0) is ${pct(D.provisioning.probability_positive_excluding_2012)}. Evidence for a pilot, not established commercial savings.
+Adoption hypothesis: an analyst-reviewed risk report for physical buyers. Willingness to pay and operational benefits remain untested.
+Sources: analysis/corn_yield_decisions_scores.csv; analysis/corn_yield_decisions_bootstrap.csv; analysis/corn_yield_decisions_spreads.csv; analysis/corn_yield_decisions_report.md.`,
 
-IF ASKED — "isn't 2012 just an outlier to drop?"
-  Two different tests, both reported. Out of the SCORE leaves ${sign(D.supply_risk.influence_low)}.
-  Out of TRAINING, refitting every fold, leaves ${sign(D.supply_risk.r2_excluding_2012)}. Neither removes
-  the result; it is the season doing the most work.`,
+  risks: `Bias: equal weighting across five states is not national production weighting. Test production weights and errors by region before extending to farms or other crops.
+Failure case: skill is ${sign(D.supply_risk.severity_high_r2)} in the most extreme third, but ${sign(D.supply_risk.severity_low_r2_ex2012)} in calm seasons without 2012. An aggregate score hides failures.
+Availability: current-season county inputs passed the historical availability audit in only 3/26 seasons. Retrospective data may be revised; prospective frozen snapshots are needed.
+Responsible use: human review, explicit uncertainty and model-card use limits. No futures position or automated procurement decision based on this prototype.
+Gaps: no independent yield holdout, storage economics, basis exposure or contracted delivery constraints. Coffee/cocoa require separate crop-specific validation.
+Sources: models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md; analysis/corn_yield_strata_buckets.csv; analysis/corn_yield_nowcast_report.md.`,
 
-  uncertainty: `1:00  ·  leave by 4:05
+  deployment: `Implemented stack: Python, pandas, scikit-learn and Parquet, with CLI ingestion and reproducible CSV/report outputs. There is no production service.
+Proposed workflow: scheduled ingestion, freshness checks, a versioned forecast and interval, then analyst review in a procurement report.
+Weather is public, but ingestion, storage, maintenance and any licensed market data have costs. No latency or throughput service level has been measured.
+Scale cached ingestion by region; new crops need new features and validation. Withhold output on stale inputs or failed validation.
+Sources: requirements.txt; src/pipeline/cli.py; src/pipeline/storage.py; README.md, Reproduce; docs/lseg_extraction_checklist.md.`,
 
-• A point forecast is not a risk estimate — a buyer needs the spread
-• Jackknife+, calibrated on earlier harvests only; coverage measured, not assumed
-• ${D.uncertainty.covered}/${D.uncertainty.harvests} at nominal ${pct(D.uncertainty.nominal_level)} — say that the guarantee is only ${pct(D.uncertainty.guaranteed_level)}
-• ${D.uncertainty.tightest_year} clears its bound by ${num(D.uncertainty.tightest_margin_t_per_ha, 3)} t/ha. Price of coverage: ±${num(D.uncertainty.half_width_pp, 1)}% of trend
-
-IF ASKED — "16 observations cannot calibrate anything"
-  Agreed — which is why the method is distribution-free rather than Gaussian,
-  and why coverage is quoted with its resolution: one season is 6.25 points.`,
-
-  nulls: `0:50  ·  leave by 4:55
-
-• The other half. Every candidate frozen before its final test
-• GEFS sealed holdout ${pct(D.trading_nulls.gefs_holdout_net, 1)}, Sharpe ${num(D.trading_nulls.gefs_holdout_sharpe)}; USDA ${pct(D.trading_nulls.usda_net, 1)}
-• Seven predeclared checks failed, so the 2026 holdout was never opened
-• Nothing retuned after a gate failed. This is the result, not a setback`,
-
-  efficiency: `1:35  ·  leave by 6:30
-
-• The core slide. Three reasons, not one excuse
-• ONE — already priced. Race run on the HARVEST, not returns: who knew what?
-• Price ${num(D.efficiency.price_r2, 3)}, nowcast ${num(D.efficiency.nowcast_r2, 3)}, together only ${num(D.efficiency.joint_r2, 3)} — same information
-• Nowcast adds ${sign(D.efficiency.incremental_r2)}; ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012
-• TWO — break-even sits ${D.efficiency.detection_ratio.toFixed(0)}× under what ${D.efficiency.observations_available} returns can detect
-• THREE — it lost money, which an invisible edge would not do
-
-IF ASKED — "could a bigger sample find an edge?"
-  Possibly: ~${D.efficiency.observations_needed.toLocaleString()} independent returns against ${D.efficiency.observations_available} available. But it cuts
-  both ways — the losses are far too large to be a small positive edge. The
-  power argument bounds the evidence; it does not rescue the model.`,
-
-  provisioning: `1:00  ·  leave by 7:30
-
-• So who uses it? Not a speculator — someone already holding the exposure
-• Price-free by construction: no futures position anywhere in the test
-• Saves ${pct(D.provisioning.saving_all_years)} of provisioning cost vs a no-weather baseline
-• Control: model is the NARROWER distribution (${num(D.provisioning.spread_ratio)}×) — not just over-provisioning
-• Without 2012: ${pct(D.provisioning.saving_excluding_2012)}, bootstrap straddles zero. Insurance, not a planning tool
-
-IF ASKED — "why no dollar figure?"
-  A dollar figure needs a price, and a price is how the rejected trading signal
-  sneaks back in. Costs are in holding-cost units; converting scales every
-  strategy identically and changes no ranking.`,
-
-  close: `0:30  ·  leave by 8:00   ·   then 2:00 for questions
-
-• Measures a real supply shock — in the seasons that matter
-• Already priced by the time the model can compute it
-• Insurance for someone holding the risk, not an edge
-• Reproducible: locked protocols, committed outputs, sealed holdouts that stayed sealed
-
-Q&A INDEX — the five anticipated questions and the slide holding each answer:
-  USDA as benchmark .............. measurement
-  2012 as an outlier ............. concentration
-  sample too small to calibrate .. uncertainty
-  bigger sample, real edge? ...... efficiency
-  why no dollar figure ........... provisioning
-
-  If asked something not here: say what would settle it and what the repository
-  would need, rather than speculating. That is the project's whole method.`,
+  close: `Final outcome: a reproducible corn supply-risk research package with uncertainty and explicit limits. The tested trading strategies failed.
+Reflection: predicting physical damage does not establish incremental market information; timing and decision context change what useful means.
+Next: freeze a prospective harvest, compare with USDA forecasts and production weights, then pilot a report with physical buyers and realistic storage/basis costs.
+Value: make supply exposure easier to reason about without promising a trading edge.
+Stop speaking at 8:00. Two minutes remain for questions; hard stop at 10:00.
+Q&A: baseline/models on slide 5; 2012 and chronological evaluation on slide 6; calibration on slide 7; market efficiency on slide 8; dollar savings on slide 9.
+Sources: models/corn-supply-risk-counties-drought-v1/MODEL_CARD.md; analysis/corn_price_information_report.md; analysis/corn_yield_decisions_report.md.`,
 };
 
 // ------------------------------------------------------------------ slides
+// Keep the existing palette and type. New content uses aligned text rows;
+// citations stay in notes, preserving the local edit that removed footers.
+function rows(K, s, items, { y = 1.95, step = 1.14, labelWidth = 3.1, fontSize = 18 } = {}) {
+  items.forEach(([label, body], i) => {
+    K.text(s, label, { x: M, y: y + i * step, w: labelWidth, h: step - 0.15,
+      fontSize, bold: true, color: C.green });
+    K.text(s, body, { x: M + labelWidth + 0.3, y: y + i * step,
+      w: CW - labelWidth - 0.3, h: step - 0.15, fontSize, color: C.ink,
+      lineSpacingMultiple: 1.15 });
+  });
+}
 const SLIDE_FNS = {
   title: (pres, K, I) => {
     const s = pres.addSlide();
     s.background = { color: C.dark };
-    K.text(s, 'DUKE AIPI 590 · ALTERNATIVE DATA · FINAL', { x: M, y: 1.5, w: 9, h: 0.35, fontSize: 13, bold: true, color: C.gold, charSpacing: 2, valign: 'middle' });
-    K.text(s, 'Climate Impacts on\nFutures Pricing', { x: M, y: 2.0, w: 9, h: 1.9, fontFace: HEAD, fontSize: 48, bold: true, color: C.white, lineSpacingMultiple: 1.05 });
-    K.text(s, 'What free weather data can measure, what the market already knows,\nand who can still use the difference', { x: M, y: 4.0, w: 9.2, h: 0.9, fontSize: 17, color: C.mist, lineSpacingMultiple: 1.3 });
-    s.addImage({ data: I.cornGold, x: 11.0, y: 2.1, w: 1.5, h: 1.5 });
-    K.text(s, 'Haydn Stucker · November 2026', { x: M, y: 5.55, w: 9, h: 0.4, fontSize: 15, color: C.mist, valign: 'middle' });
+    K.text(s, 'DUKE AIPI 590 · ALTERNATIVE DATA · FINAL', { x: M, y: 1.5, w: 9, h: 0.35, fontSize: 13, bold: true, color: C.gold, charSpacing: 2 });
+    K.text(s, 'Climate Impacts on\nFutures Pricing', { x: M, y: 2.0, w: 9, h: 1.9, fontFace: HEAD, fontSize: 48, bold: true, color: C.white });
+    K.text(s, 'Measuring corn supply risk\nand testing public weather signals', { x: M, y: 4.1, w: 8.8, h: 0.9, fontSize: 21, color: C.mist });
+    s.addImage({ data: I.cornGold, x: 11, y: 2.1, w: 1.5, h: 1.5 });
+    K.text(s, 'Haydn Stucker · November 18, 2026', { x: M, y: 5.55, w: 9, h: 0.4, fontSize: 15, color: C.mist });
     return s;
   },
-
-  arc: (pres, K, I) => {
+  recap: (pres, K) => {
     const s = pres.addSlide();
-    K.header(s, 'One project, two tests, one answer',
-      'The measurement worked and the trading signal failed — these are not in tension');
-    [
-      [I.rulerWhite, 'MEASURE', 'Can public climate data identify real crop supply shocks?', 'Yes — in the seasons that matter', C.green],
-      [I.chartWhite, 'PREDICT', 'Can those signals predict tradeable commodity returns?', 'No — and now we know why', C.red],
-    ].forEach(([icon, head, question, answer, color], i) => {
-      const x = M + i * (CW / 2 + 0.2);
-      const w = CW / 2 - 0.2;
-      K.card(s, x, 1.85, w, 2.5);
-      K.iconCircle(s, icon, x + 0.45, 2.2, 0.8, color);
-      K.text(s, head, { x: x + 1.5, y: 2.3, w: w - 1.9, h: 0.35, fontSize: 14, bold: true, color, charSpacing: 1.5 });
-      K.text(s, question, { x: x + 0.45, y: 3.2, w: w - 0.9, h: 0.5, fontSize: 15, color: C.ink });
-      K.text(s, answer, { x: x + 0.45, y: 3.72, w: w - 0.9, h: 0.4, fontSize: 15, bold: true, color });
+    K.header(s, 'The problem and the people it affects', 'Weather shocks create supply uncertainty for agricultural markets');
+    rows(K, s, [
+      ['Problem', 'Can public weather data measure crop shortfalls and add information beyond futures prices?'],
+      ['Target users', 'Commodity analysts first; corn buyers, feed mills, ethanol plants and lenders for the supply-risk result.'],
+      ['Why it matters', 'A shortfall can leave buyers under-provisioned. A false trading signal can turn a plausible story into losses.'],
+      ['Intended impact', 'Estimate physical exposure with uncertainty and test whether the same data supports market timing.'],
+    ], { step: 1.13, fontSize: 19 });
+    return s;
+  },
+  product: (pres, K) => {
+    const s = pres.addSlide();
+    K.header(s, 'The final research product', 'A reproducible supply-risk package with a fixed model specification and model card');
+    K.text(s, 'AT MIDSEMESTER', { x: M, y: 1.9, w: 5.7, h: 0.35, fontSize: 15, bold: true, color: C.muted });
+    K.text(s, 'ADDED FOR THE FINAL', { x: 6.9, y: 1.9, w: 5.8, h: 0.35, fontSize: 15, bold: true, color: C.green });
+    const pairs = [
+      ['Leave-one-year-out yield estimates', 'Chronological forecasts against a trend baseline'],
+      ['Point estimates of crop damage', 'Intervals, coverage and failure-case analysis'],
+      ['Supply-risk deliverable proposed', 'Buyer buffer experiment and documented use limits'],
+    ];
+    pairs.forEach(([before, after], i) => {
+      const y = 2.55 + i * 1.05;
+      K.text(s, before, { x: M, y, w: 5.55, h: 0.8, fontSize: 22, color: C.muted });
+      K.text(s, after, { x: 6.9, y, w: 5.7, h: 0.8, fontSize: 22, color: C.ink });
     });
-    K.card(s, M, 4.65, CW, 1.55, C.greenSoft);
-    K.text(s, 'WHAT TO WATCH FOR', { x: M + 0.45, y: 4.9, w: 4, h: 0.3, fontSize: 12, bold: true, color: C.goldText, charSpacing: 1.5 });
-    K.text(s, `Every result that follows carries a second number: the same test with ${D.supply_risk.most_load_bearing_year} removed and every fold refitted. One drought season recurs in all of them, and how much each result depends on it is the honest measure of what this project established.`,
-      { x: M + 0.45, y: 5.25, w: CW - 0.9, h: 0.8, fontSize: 15, color: C.ink, lineSpacingMultiple: 1.25 });
-    K.footer(s, 'Both tests use the same point-in-time archive and the same publication-aware feature construction.');
+    K.text(s, 'Delivered: Python pipeline, CSV forecasts, analysis reports and a model card.\nThe trading failures were already known at midsemester.', { x: M, y: 5.9, w: CW, h: 0.7, fontSize: 16, color: C.green });
     return s;
   },
-
-  measurement: (pres, K, I) => {
+  data: (pres, K) => {
     const s = pres.addSlide();
-    K.header(s, 'What worked: measuring corn supply risk',
-      'County weather and drought beat a training-only trend forecast on held-out harvests');
+    K.header(s, 'Data sources and preparation', 'Match the crop geography, the season and the information available at each decision');
+    rows(K, s, [
+      ['Weather and drought', 'NOAA nClimGrid county weather, NASA POWER points and US Drought Monitor drought coverage.'],
+      ['Yield and market data', 'OWID/FAO annual yield; USDA crop releases; NOAA CPC/GEFS forecasts; dated LSEG futures.'],
+      ['Preparation', 'Aggregate to growing seasons. Fit trends and scaling inside training folds. Use release times and next-open trades.'],
+      ['Key limitation', 'County history is revised and often late. Five-state equal weights do not represent national production weights.'],
+    ], { step: 1.03, fontSize: 18 });
+    K.text(s, 'No synthetic training data. Resampling estimates uncertainty; the buyer example simulates costs.', { x: M, y: 6.35, w: CW, h: 0.45, fontSize: 15, color: C.muted });
+    return s;
+  },
+  models: (pres, K) => {
+    const s = pres.addSlide();
+    K.header(s, 'Baselines and model selection', 'The climate model must improve on a matched comparison with less information');
+    rows(K, s, [
+      ['Supply baseline', 'A linear yield trend, fitted only on earlier harvests. Compare errors on identical test years.'],
+      ['Supply model', 'Standardized Ridge, alpha = 1, fixed from the original study. July heat and peak drought explain yield deviations.'],
+      ['Forward evaluation', 'Start with ten training harvests. Refit trend and scaling each year. Report R² versus trend, MAE and interval coverage.'],
+      ['Trading models', 'Ridge, logistic regression and shallow trees. Select within earlier folds, then freeze. Compare with market-only and fixed rules.'],
+    ], { step: 1.14, fontSize: 18 });
+    return s;
+  },
+  measurement: (pres, K) => {
+    const s = pres.addSlide();
+    K.header(s, 'Corn weather improves the yield estimate', 'Chronological evaluation with full-season county weather and drought');
     const d = D.supply_risk;
     [
-      [sign(d.r2_all_years), `R² vs trend, ${d.test_years} forward-validated harvests`, C.green],
-      [sign(d.r2_excluding_2012), 'the same test, 2012 removed and refitted', C.green],
-      [num(d.mae_all_years), `t/ha mean error, against the trend’s ${num(d.trend_mae_all_years)}`, C.ink],
+      [sign(d.r2_all_years), `R² versus trend across ${d.test_years} harvests`, C.green],
+      [sign(d.r2_excluding_2012), 'R² after removing 2012 and refitting', C.green],
+      [`${num(d.mae_all_years)} t/ha`, `MAE versus ${num(d.trend_mae_all_years)} for the trend baseline`, C.ink],
     ].forEach(([value, caption, color], i) => {
       const w = (CW - 0.8) / 3;
-      const x = M + i * (w + 0.4);
-      K.card(s, x, 1.95, w, 2.0);
-      K.stat(s, x, 2.2, w, value, caption, color, 42);
+      K.stat(s, M + i * (w + 0.4), 2.3, w, value, caption, color, 37);
     });
-    K.card(s, M, 4.3, CW, 0.95, C.greenSoft);
-    K.text(s, 'Positive in both samples. Every fold trains only on earlier harvests and refits the yield trend inside itself, so no held-out year helped define what counts as normal for itself.',
-      { x: M + 0.45, y: 4.52, w: CW - 0.9, h: 0.55, fontSize: 15, color: C.ink, lineSpacingMultiple: 1.2 });
-    K.text(s, 'But this is post-harvest attribution, not an in-season forecast: county weather reached only 3 of 26 growing seasons in time to be used.',
-      { x: M, y: 5.5, w: CW, h: 0.5, fontSize: 14, color: C.muted, lineSpacingMultiple: 1.2 });
-    K.footer(s, 'Metric: R² against each fold’s own trend forecast. Source: corn_yield_forward_validation_results.csv.');
+    K.text(s, 'Improvement since midsemester: each test now uses only earlier training years, with a matched trend baseline.', { x: M, y: 4.25, w: CW, h: 0.8, fontSize: 22, color: C.green });
+    K.text(s, 'The old leave-one-year-out R² uses a different denominator. These scores are not a before/after accuracy comparison.', { x: M, y: 5.25, w: CW, h: 0.7, fontSize: 18, color: C.muted });
+    K.text(s, 'Historical hindcast using revised inputs. No untouched yield holdout or timely county forecast is established.', { x: M, y: 6.25, w: CW, h: 0.5, fontSize: 16, color: C.red });
     return s;
   },
-
-  concentration: (pres, K, I, F) => {
-    const s = pres.addSlide();
-    K.header(s, 'Where the result actually lives',
-      'Not a single-season artifact — but concentrated in the seasons that went wrong');
-    K.figure(s, F.strata, { x: M, y: 1.75, w: CW, h: 2.85 });
-    const d = D.supply_risk;
-    [
-      [`${sign(d.influence_low)} to ${sign(d.influence_high)}`, 'range when any single harvest is withheld from the score', C.green],
-      [sign(d.severity_high_r2), 'in the third of seasons furthest from trend', C.green],
-      [sign(d.severity_low_r2_ex2012), 'in the calmest third, with 2012 refitted out', C.red],
-    ].forEach(([value, caption, color], i) => {
-      const w = (CW - 0.8) / 3;
-      K.stat(s, M + i * (w + 0.4), 4.75, w, value, caption, color, 26);
-    });
-    K.footer(s, 'Withholding a harvest from a score is not the exclude-2012 sample, which also drops it from training and refits every fold.');
-    return s;
-  },
-
   uncertainty: (pres, K, I, F) => {
     const s = pres.addSlide();
-    K.header(s, 'How precise is the estimate?',
-      'Calibrated intervals, with coverage measured rather than assumed');
-    K.figure(s, F.intervals, { x: M, y: 1.75, w: CW, h: 2.85 });
+    K.header(s, 'The estimate now includes uncertainty', 'The interval must cover bad seasons as well as ordinary ones');
+    K.figure(s, F.intervals, { x: M, y: 1.7, w: CW, h: 3.3 });
     const d = D.uncertainty;
     [
-      [`${d.covered}/${d.harvests}`, `covered at a nominal ${pct(d.nominal_level)}; the guarantee is only ${pct(d.guaranteed_level)}`, C.green],
-      [`±${num(d.half_width_pp, 1)}%`, 'of trend yield — the honest resolution of the estimate', C.ink],
-      [`${num(d.tightest_margin_t_per_ha, 3)} t/ha`, `the margin by which ${d.tightest_year} stays inside its interval`, C.red],
+      [`${d.covered}/${d.harvests}`, `historical harvests inside the nominal ${pct(d.nominal_level)} interval`, C.green],
+      [`±${num(d.half_width_pp, 1)}%`, 'average half-width as a share of trend yield', C.ink],
+      [`${num(d.tightest_margin_t_per_ha, 3)} t/ha`, `margin for the ${d.tightest_year} drought harvest`, C.red],
     ].forEach(([value, caption, color], i) => {
       const w = (CW - 0.8) / 3;
-      K.stat(s, M + i * (w + 0.4), 4.75, w, value, caption, color, 26);
+      K.stat(s, M + i * (w + 0.4), 5.1, w, value, caption, color, 26);
     });
-    K.footer(s, 'Jackknife+ on chronological folds; every narrower construction tested leaves 2012 outside.');
+    K.text(s, 'Observed coverage is not a future guarantee. The time series does not establish exchangeability.', { x: M, y: 6.5, w: CW, h: 0.35, fontSize: 14, color: C.muted });
     return s;
   },
-
-  efficiency: (pres, K, I, F) => {
+  nulls: (pres, K) => {
     const s = pres.addSlide();
-    K.header(s, 'Why it does not become a trade',
-      'Three separate reasons for that result — not one excuse for it');
-    K.figure(s, F.efficiency, { x: M, y: 1.7, w: CW, h: 2.6 });
-    const d = D.efficiency;
+    K.header(s, 'The trading candidates failed validation', 'Success required positive net returns, stability and stronger results than matched controls');
+    const d = D.trading_nulls;
     [
-      [I.scaleWhite, 'ALREADY PRICED', `The December contract explains ${num(d.price_r2, 3)} of the harvest on its own. The nowcast adds ${sign(d.incremental_r2)}, and ${sign(d.incremental_r2_excluding_2012)} without 2012.`, C.green],
-      [I.searchWhite, 'BELOW RESOLUTION', `Break-even is an R² of ${d.break_even_r2.toFixed(5)}; ${d.observations_available} independent returns can only detect ${d.detectable_r2.toFixed(5)}. A factor of ${d.detection_ratio.toFixed(0)}.`, C.gold],
-      [I.warnWhite, 'AND IT LOST MONEY', 'The losses on the previous slide are the strongest sign. An edge too small to detect scatters near zero — it does not lose 52%.', C.red],
-    ].forEach(([icon, head, body, color], i) => {
-      const w = (CW - 0.7) / 3;
-      const x = M + i * (w + 0.35);
-      K.iconCircle(s, icon, x, 4.45, 0.62, color);
-      K.text(s, head, { x: x + 0.78, y: 4.55, w: w - 0.78, h: 0.3, fontSize: 12, bold: true, color, charSpacing: 1 });
-      K.text(s, body, { x, y: 5.25, w, h: 1.3, fontSize: 13, color: C.ink, lineSpacingMultiple: 1.2 });
+      ['GEFS forecast revisions', `${pct(d.gefs_holdout_net, 1)} net`, `Sharpe ${num(d.gefs_holdout_sharpe)}\n${d.gefs_holdout_trades} trades in the sealed 2026 holdout`],
+      ['USDA Crop Progress', `${pct(d.usda_net, 1)} net`, `Sharpe ${num(d.usda_sharpe)}\nPositive in ${d.usda_positive_years} of ${d.usda_years} development years`],
+    ].forEach(([name, net, detail], i) => {
+      const y = 2.0 + i * 1.35;
+      K.text(s, name, { x: M, y, w: 4.4, h: 0.8, fontSize: 22, bold: true });
+      K.text(s, net, { x: 5.2, y, w: 2.7, h: 0.8, fontSize: 28, bold: true, color: C.red });
+      K.text(s, detail, { x: 8.2, y, w: 4.5, h: 0.9, fontSize: 17, color: C.muted });
     });
-    K.footer(s, 'The race is run on the harvest, not on returns: it asks who knew what, rather than whether the signal predicts the price.');
+    K.text(s, 'Seven USDA checks failed. Its 2026 holdout stayed sealed.\nFrozen candidates were not retuned after failure.', { x: M, y: 4.85, w: CW, h: 0.9, fontSize: 21, color: C.green });
+    K.text(s, `New insight: weather adds ${sign(D.efficiency.incremental_r2)} harvest R² beyond December futures prices,\nbut only ${sign(D.efficiency.incremental_r2_excluding_2012)} without 2012. This suggests overlapping information.`, { x: M, y: 6.05, w: CW, h: 0.65, fontSize: 17, color: C.muted });
     return s;
   },
-
   provisioning: (pres, K, I, F) => {
     const s = pres.addSlide();
-    K.header(s, 'Who can still use it',
-      'Not a speculator — someone who already holds the risk, tested without any price');
-    K.figure(s, F.decisions, { x: M, y: 1.75, w: CW, h: 2.8 });
+    K.header(s, 'A buyer can use the estimate to size a buffer', 'Worked example: an August 1 estimate from point weather and drought, at a 4:1 shortfall penalty');
+    K.figure(s, F.decisions, { x: M, y: 1.7, w: CW, h: 3.2 });
     const d = D.provisioning;
     [
-      [pct(d.saving_all_years), `provisioning cost saved against a no-weather baseline, at a ${d.penalty_ratio}:1 penalty`, C.green],
-      [`${num(d.spread_ratio)}×`, 'the model is the narrower distribution — so this is not over-provisioning', C.ink],
-      [pct(d.saving_excluding_2012), `without 2012 — but the bootstrap straddles zero (P = ${pct(d.probability_positive_excluding_2012)})`, C.gold],
+      [pct(d.saving_all_years), 'lower simulated cost than a no-weather baseline', C.green],
+      [pct(d.saving_excluding_2012), 'estimated saving without 2012; uncertainty includes zero', C.goldText],
+      ['Pilot first', 'analyst-reviewed risk reports for physical corn buyers', C.ink],
     ].forEach(([value, caption, color], i) => {
       const w = (CW - 0.8) / 3;
-      K.stat(s, M + i * (w + 0.4), 4.7, w, value, caption, color, 26);
+      K.stat(s, M + i * (w + 0.4), 5.0, w, value, caption, color, 28);
     });
-    K.footer(s, 'No futures price enters the decision, so it cannot restate the rejected trading signal as a profit.');
+    K.text(s, 'Hypothetical cost units, not realized dollars. Storage, basis and contracts are omitted; adoption is untested.', { x: M, y: 6.45, w: CW, h: 0.4, fontSize: 14, color: C.muted });
     return s;
   },
-
-  nulls: (pres, K, I) => {
+  risks: (pres, K) => {
     const s = pres.addSlide();
-    K.header(s, 'What failed, and how we know',
-      'Every candidate was frozen before its final test — and none was retuned afterwards');
-    const d = D.trading_nulls;
-    const rows = [
-      ['GEFS forecast revisions', `${pct(d.gefs_holdout_net, 1)} net`, `Sharpe ${num(d.gefs_holdout_sharpe)}`, `${d.gefs_holdout_trades} sealed-holdout trades`],
-      ['USDA Crop Progress', `${pct(d.usda_net, 1)} net`, `Sharpe ${num(d.usda_sharpe)}`, `positive in ${d.usda_positive_years} of ${d.usda_years} years`],
-    ];
-    rows.forEach(([name, net, sharpe, detail], i) => {
-      const y = 1.95 + i * 1.15;
-      K.card(s, M, y, CW, 0.95, C.redSoft);
-      K.text(s, name, { x: M + 0.4, y, w: 4.2, h: 0.95, fontSize: 16, bold: true, color: C.ink, valign: 'middle' });
-      K.text(s, net, { x: M + 4.6, y, w: 2.0, h: 0.95, fontFace: HEAD, fontSize: 22, bold: true, color: C.red, align: 'center', valign: 'middle' });
-      K.text(s, sharpe, { x: M + 6.7, y, w: 2.0, h: 0.95, fontSize: 15, color: C.muted, align: 'center', valign: 'middle' });
-      K.text(s, detail, { x: M + 8.8, y, w: CW - 9.2, h: 0.95, fontSize: 14, color: C.muted, valign: 'middle' });
-    });
-    K.card(s, M, 4.45, CW, 1.75, C.panel);
-    K.text(s, 'THE DISCIPLINE IS THE RESULT', { x: M + 0.45, y: 4.7, w: 6, h: 0.3, fontSize: 12, bold: true, color: C.goldText, charSpacing: 1.5 });
-    [
-      'Candidate identity, costs and gate checks were committed before each reveal.',
-      'Seven predeclared checks failed on the USDA model, so its 2026 holdout was never opened.',
-      'No specification was retuned after a gate failure — the avenue was closed instead.',
-    ].forEach((line, i) => {
-      s.addImage({ data: I.checkGreen, x: M + 0.5, y: 5.12 + i * 0.36, w: 0.16, h: 0.16 });
-      K.text(s, line, { x: M + 0.82, y: 5.06 + i * 0.36, w: CW - 1.4, h: 0.32, fontSize: 13, color: C.ink, valign: 'middle' });
-    });
-    K.footer(s, 'Sources: gefs_corn_holdout_results.csv, nass_corn_progress_validation_results.csv.');
+    K.header(s, 'Risks, failure cases and responsible use', 'The model card limits the claims and the decisions this prototype can support');
+    rows(K, s, [
+      ['Geographic bias', 'Five states with equal weights. Test production weights and regional errors before extending to farms or other crops.'],
+      ['Uneven performance', `Calm-season R² is ${sign(D.supply_risk.severity_low_r2_ex2012)} without 2012. Show results by season and retain the trend-only fallback.`],
+      ['Late or revised data', 'County inputs were timely in only 3 of 26 historical seasons. Archive future vintages and withhold stale outputs.'],
+      ['Decision safeguards', 'Human review and explicit intervals. No automated trading or procurement. Validate real costs and a new harvest first.'],
+    ], { step: 1.14, fontSize: 18 });
     return s;
   },
-
+  deployment: (pres, K) => {
+    const s = pres.addSlide();
+    K.header(s, 'Real-world feasibility', 'The pipeline exists; production operation and commercial adoption remain future work');
+    rows(K, s, [
+      ['Implemented stack', 'Python, pandas, scikit-learn and Parquet. CLI ingestion produces reproducible forecasts and reports.'],
+      ['Proposed integration', 'Scheduled ingestion and freshness checks feed a versioned risk report for a procurement analyst.'],
+      ['Operational constraints', 'Data-release latency and revisions limit reliability. Public weather still needs maintenance; LSEG requires licensed access.'],
+      ['Scaling', 'Cache ingestion by region, monitor missing data, then validate each new crop. No production cost or speed benchmark yet.'],
+    ], { step: 1.14, fontSize: 18 });
+    return s;
+  },
   close: (pres, K, I) => {
     const s = pres.addSlide();
     s.background = { color: C.dark };
-    K.text(s, 'THE ANSWER', { x: M, y: 1.3, w: 6, h: 0.35, fontSize: 13, bold: true, color: C.gold, charSpacing: 2, valign: 'middle' });
-    K.text(s, 'Free weather data measures a real\nsupply shock. The market already\nknows about it.', { x: M, y: 1.75, w: 7.6, h: 2.5, fontFace: HEAD, fontSize: 34, bold: true, color: C.white, lineSpacingMultiple: 1.15 });
-    [
-      ['Measurement', 'Validated forward, concentrated in extreme seasons'],
-      ['Efficiency', 'Priced in by the time the model can compute it'],
-      ['Use', 'Insurance for a buyer holding the risk — not an edge'],
-    ].forEach(([head, sub], i) => {
-      const y = 1.85 + i * 1.25;
-      K.iconCircle(s, [I.rulerWhite, I.scaleWhite, I.shieldWhite][i], 8.7, y, 0.78, C.green);
-      K.text(s, [
-        { text: head, options: { bold: true, fontSize: 17, color: C.white, breakLine: true } },
-        { text: sub, options: { fontSize: 13, color: C.mist } },
-      ], { x: 9.68, y, w: W - M - 9.68, h: 0.9, valign: 'middle' });
-    });
-    K.text(s, 'Questions?', { x: M, y: 4.9, w: 6, h: 0.7, fontFace: HEAD, fontSize: 30, bold: true, color: C.gold, valign: 'middle' });
-    s.addImage({ data: I.githubMist, x: M, y: 5.95, w: 0.3, h: 0.3 });
-    K.text(s, 'github.com/haydn-s/climate-futures-pricing', { x: M + 0.42, y: 5.93, w: 6.5, h: 0.35, fontSize: 14, color: C.mist, valign: 'middle' });
+    K.text(s, 'OUTCOME AND REFLECTION', { x: M, y: 0.65, w: CW, h: 0.4, fontSize: 14, bold: true, color: C.gold, charSpacing: 2 });
+    K.text(s, 'Public weather measures corn supply risk.\nThe tested trading signals failed.', { x: M, y: 1.35, w: CW, h: 1.4, fontFace: HEAD, fontSize: 34, bold: true, color: C.white });
+    K.text(s, 'The lesson: useful physical information needs timely data and a validated decision before it creates value.', { x: M, y: 3.0, w: CW, h: 0.9, fontSize: 21, color: C.mist });
+    K.text(s, 'WHAT COMES NEXT', { x: M, y: 4.2, w: CW, h: 0.4, fontSize: 14, bold: true, color: C.gold, charSpacing: 2 });
+    K.text(s, 'Freeze a new harvest test and compare with USDA forecasts.\nAdd production weights and pilot a buyer report with realistic costs.', { x: M, y: 4.85, w: CW, h: 1.0, fontSize: 22, color: C.white });
+    K.text(s, 'Questions?', { x: M, y: 6.2, w: 3.2, h: 0.5, fontSize: 24, color: C.gold, bold: true });
+    K.text(s, 'github.com/haydn-s/climate-futures-pricing', { x: 6.5, y: 6.3, w: 6.2, h: 0.35, fontSize: 14, color: C.mist });
     return s;
   },
 };
-
-// Deck order, as presented. Reorder these keys to reorder the deck.
-//
-// The chain is claim, qualify, quantify, counter-evidence, explanation,
-// resolution. `nulls` precedes `efficiency` deliberately: the losses are the
-// evidence and the three reasons are the explanation, so showing the
-// explanation first would have the deck accounting for a result the audience
-// has not seen. `provisioning` is penultimate so the argument ends on what the
-// work is good for rather than on what failed.
-const ORDER = ['title', 'arc', 'measurement', 'concentration', 'uncertainty',
-  'nulls', 'efficiency', 'provisioning', 'close'];
 
 // ------------------------------------------------------------------ build
 async function writeDeck(file, keys, I, F) {
@@ -466,10 +426,25 @@ async function writeDeck(file, keys, I, F) {
     const s = SLIDE_FNS[key](pres, K, I, F);
     const index = ORDER.indexOf(key);
     if (index > 0) K.number(s, key === 'close');
-    s.addNotes(NOTECARDS[key]);
+    const seconds = PLAN[index][1];
+    const leaveBy = PLAN.slice(0, index + 1).reduce((sum, [, duration]) => sum + duration, 0);
+    s.addNotes(`${clock(seconds)} speaking · leave by ${clock(leaveBy)}\n\n${NOTECARDS[key]}`);
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   await pres.writeFile({ fileName: file });
+  // PptxGenJS 4 can declare one slide master per slide while emitting only
+  // the shared master. Remove only those absent master declarations, leaving
+  // real parts and relationships untouched so the package stays valid.
+  const zip = await JSZip.loadAsync(fs.readFileSync(file));
+  const types = await zip.file('[Content_Types].xml').async('string');
+  const cleaned = types.replace(/<Override\b[^>]*\/>/g, entry => {
+    const part = entry.match(/PartName="\/(ppt\/slideMasters\/slideMaster\d+\.xml)"/);
+    return part && !zip.file(part[1]) ? '' : entry;
+  });
+  if (cleaned !== types) {
+    zip.file('[Content_Types].xml', cleaned);
+    fs.writeFileSync(file, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+  }
 }
 
 (async () => {
@@ -477,6 +452,10 @@ async function writeDeck(file, keys, I, F) {
   if (missing.length) throw new Error(`ORDER names a slide or notecard that does not exist: ${missing}`);
   if (new Set(ORDER).size !== ORDER.length) throw new Error('duplicate key in ORDER');
   if (ORDER.length !== Object.keys(SLIDE_FNS).length) throw new Error('every slide must appear in ORDER exactly once');
+  const total = PLAN.reduce((sum, [, seconds]) => sum + seconds, 0);
+  if (total !== SPEAKING_SECONDS || total + QUESTION_SECONDS > 600) {
+    throw new Error('speaking plan must be eight minutes with questions inside the ten-minute hard stop');
+  }
   const [target, mode] = process.argv.slice(2);
   if (!target) throw new Error('usage: node build_deck.js <out.pptx> [--single]');
   const [I, F] = [await renderIcons(), await renderFigures()];
